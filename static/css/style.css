@@ -1,8 +1,13 @@
-/* static/css/style.css */
 :root {
     --primary-blue: #2563EB;
+    --primary-dark: #1D4ED8;
+    --accent-blue: #EFF6FF;
     --background: #FFFFFF;
     --card-bg: #F8FAFC;
+    --text-primary: #2563EB;
+    --text-secondary: #64748B;
+    --border: #E2E8F0;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 * {
@@ -14,14 +19,17 @@
 body {
     font-family: 'Inter', sans-serif;
     background: var(--background);
+    color: var(--text-secondary);
+    line-height: 1.6;
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 0 20px;
 }
 
+/* Шапка */
 .header {
     background: var(--primary-blue);
     color: white;
@@ -30,30 +38,285 @@ body {
     margin-bottom: 30px;
 }
 
+.logo {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+/* Основной контент */
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+/* Карточки */
 .card {
     background: var(--card-bg);
     border-radius: 12px;
     padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+}
+
+.card h2 {
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+/* Поля ввода */
+.input-group {
     margin-bottom: 20px;
 }
 
 .text-input {
     width: 100%;
     padding: 12px 16px;
-    border: 2px solid #E2E8F0;
+    border: 2px solid var(--border);
     border-radius: 8px;
+    font-size: 14px;
+    font-family: 'Fira Code', monospace;
     margin-bottom: 12px;
+    transition: border-color 0.3s;
 }
 
+.text-input:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+}
+
+.text-input.small {
+    width: 60%;
+}
+
+/* Кнопки */
 .btn {
     padding: 12px 24px;
-    background: var(--primary-blue);
-    color: white;
     border: none;
     border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Inter', sans-serif;
 }
 
+.btn.primary {
+    background: var(--primary-blue);
+    color: white;
+    width: 100%;
+}
+
+.btn.primary:hover {
+    background: var(--primary-dark);
+}
+
+.btn.secondary {
+    background: var(--accent-blue);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.btn.secondary:hover {
+    background: var(--primary-blue);
+    color: white;
+}
+
+.btn.large {
+    padding: 16px 24px;
+    font-size: 16px;
+}
+
+/* Особенности */
+.features {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+.features p {
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+/* Примеры быстрого старта */
+.examples-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.example-item {
+    background: var(--accent-blue);
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-blue);
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.example-item:hover {
+    transform: translateX(4px);
+}
+
+.example-expression {
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    margin-bottom: 5px;
+}
+
+.example-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Блоки для схемы */
+.palette {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.block {
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+    font-size: 12px;
+    cursor: grab;
+    user-select: none;
+    transition: transform 0.2s;
+}
+
+.block:active {
+    cursor: grabbing;
+}
+
+.block:hover {
+    transform: scale(1.05);
+}
+
+.and-block { background: #DC2626; color: white; }
+.or-block { background: #059669; color: white; }
+.not-block { background: #7C3AED; color: white; }
+.xor-block { background: #D97706; color: white; }
+.input-block { background: #2563EB; color: white; }
+.output-block { background: #475569; color: white; }
+
+/* Рабочая область */
+.workspace {
+    min-height: 300px;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    background: var(--background);
+}
+
+.workspace p {
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+/* Таблица истинности */
+.table-container {
+    overflow-x: auto;
+}
+
+.truth-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+}
+
+.truth-table th,
+.truth-table td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+}
+
+.truth-table th {
+    background: var(--primary-blue);
+    color: white;
+    font-weight: 600;
+}
+
+.truth-table tr:nth-child(even) {
+    background: var(--accent-blue);
+}
+
+/* Модальное окно */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+}
+
+.modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.expression-preview {
+    font-family: 'Fira Code', monospace;
+    background: var(--accent-blue);
+    padding: 12px;
+    border-radius: 6px;
+    margin: 15px 0;
+    font-size: 14px;
+}
+
+/* Утилиты */
 .hidden {
-    display: none;
+    display: none !important;
+}
+
+.result-section {
+    margin-top: 20px;
+}
+
+.scheme-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.scheme-controls .btn {
+    width: auto;
+}
+
+/* Блоки переменных */
+.variable-block {
+    background: #2563EB !important;
+    min-width: 60px !important;
 }

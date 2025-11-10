@@ -2,41 +2,29 @@ from flask import Flask, render_template, request, jsonify
 from sympy import symbols, sympify, to_cnf, to_dnf
 from sympy.logic.boolalg import truth_table
 import itertools
-import json
 
 app = Flask(__name__)
-
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-
 @app.route('/api/truth_table', methods=['POST'])
 def calculate_truth_table():
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No JSON data received'})
-
         expression = data.get('expression', '').strip()
         variables_str = data.get('variables', '').strip()
 
         if not expression or not variables_str:
             return jsonify({'success': False, 'error': 'Expression and variables are required'})
 
-        # Парсинг переменных
         variables = [v.strip() for v in variables_str.split(',') if v.strip()]
-        if not variables:
-            return jsonify({'success': False, 'error': 'No valid variables provided'})
-
         sym_vars = symbols(' '.join(variables))
 
-        # Парсинг выражения
         expr_text = expression.replace('&&', '&').replace('||', '|').replace('!', '~')
         expr = sympify(expr_text)
 
-        # Построение таблицы истинности
         tt = list(truth_table(expr, sym_vars))
 
         result = {
@@ -55,14 +43,10 @@ def calculate_truth_table():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-
 @app.route('/api/normal_forms', methods=['POST'])
 def calculate_normal_forms():
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No JSON data received'})
-
         expression = data.get('expression', '').strip()
         variables_str = data.get('variables', '').strip()
 
@@ -70,9 +54,6 @@ def calculate_normal_forms():
             return jsonify({'success': False, 'error': 'Expression and variables are required'})
 
         variables = [v.strip() for v in variables_str.split(',') if v.strip()]
-        if not variables:
-            return jsonify({'success': False, 'error': 'No valid variables provided'})
-
         sym_vars = symbols(' '.join(variables))
 
         expr_text = expression.replace('&&', '&').replace('||', '|').replace('!', '~')
@@ -90,7 +71,6 @@ def calculate_normal_forms():
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

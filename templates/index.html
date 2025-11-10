@@ -1,34 +1,92 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bool Trainer</title>
+    <title>Bool Trainer - интерактивный тренажер логики</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
+        <!-- Шапка -->
         <header class="header">
             <h1 class="logo">Bool Trainer</h1>
             <p class="subtitle">интерактивный тренажер логики</p>
         </header>
 
+        <!-- Основной контент -->
         <main class="main-content">
-            <div class="card">
-                <h2>Введите булево выражение</h2>
-                <div class="input-group">
-                    <input type="text" id="expressionInput" placeholder="a & b | c" class="text-input">
-                    <input type="text" id="variablesInput" placeholder="a,b,c" class="text-input">
+            <!-- Левая панель - ввод и основные функции -->
+            <div class="left-panel">
+                <div class="card input-card">
+                    <h2>Введите булево выражение</h2>
+                    <div class="input-group">
+                        <input type="text" id="expressionInput" placeholder="Введите выражение..."
+                               class="text-input">
+                        <input type="text" id="variablesInput" placeholder="Переменные (через запятую)"
+                               class="text-input small">
+                    </div>
+                    <button id="quickStartBtn" class="btn primary">Быстрый старт</button>
+
+                    <div class="features">
+                        <p>• Построение таблиц истинности</p>
+                        <p>• Создание логических схем</p>
+                        <p>• Преобразование выражений</p>
+                    </div>
                 </div>
-                <button id="calculateBtn" class="btn primary">Построить таблицу истинности</button>
+
+                <!-- Текущие результаты -->
+                <div class="card results-card">
+                    <div id="truthTableSection" class="result-section hidden">
+                        <h3>Таблица истинности</h3>
+                        <div id="truthTableContent" class="table-container"></div>
+                    </div>
+
+                    <div id="transformSection" class="result-section hidden">
+                        <h3>Преобразование выражения</h3>
+                        <div id="transformContent"></div>
+                    </div>
+                </div>
             </div>
 
-            <div id="results" class="card hidden">
-                <h3>Результаты</h3>
-                <div id="resultsContent"></div>
+            <!-- Правая панель - быстрый старт и логическая схема -->
+            <div class="right-panel">
+                <!-- Быстрый старт -->
+                <div class="card quick-start-card">
+                    <h2>Выберите выражение для быстрого старта:</h2>
+                    <div id="quickStartExamples" class="examples-grid"></div>
+                </div>
+
+                <!-- Логическая схема -->
+                <div class="card scheme-card">
+                    <h2>Логическая схема</h2>
+                    <div class="scheme-controls">
+                        <button id="buildSchemeBtn" class="btn secondary">Построить схему</button>
+                        <button id="clearSchemeBtn" class="btn secondary">Очистить</button>
+                    </div>
+
+                    <!-- Рабочая область для схемы -->
+                    <div id="schemeWorkspace" class="workspace">
+                        <p>Перетащите блоки сюда для построения схемы...</p>
+                    </div>
+                </div>
             </div>
         </main>
+
+        <!-- Модальное окно выбора действия -->
+        <div id="actionModal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Выберите действие для выражения</h3>
+                <p id="currentExpression" class="expression-preview"></p>
+                <div class="modal-actions">
+                    <button id="truthTableBtn" class="btn primary large">📊 Построить таблицу истинности</button>
+                    <button id="transformBtn" class="btn primary large">⚡ Преобразовать выражение</button>
+                    <button id="schemeBtn" class="btn primary large">🔌 Построить логическую схему</button>
+                </div>
+                <button id="closeModal" class="btn secondary">Отмена</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
