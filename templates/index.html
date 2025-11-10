@@ -1,0 +1,36 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bool Trainer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">Bool Trainer</h1>
+            <p class="subtitle">интерактивный тренажер логики</p>
+        </header>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>Введите булево выражение</h2>
+                <div class="input-group">
+                    <input type="text" id="expressionInput" placeholder="a & b | c" class="text-input">
+                    <input type="text" id="variablesInput" placeholder="a,b,c" class="text-input">
+                </div>
+                <button id="calculateBtn" class="btn primary">Построить таблицу истинности</button>
+            </div>
+
+            <div id="results" class="card hidden">
+                <h3>Результаты</h3>
+                <div id="resultsContent"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
