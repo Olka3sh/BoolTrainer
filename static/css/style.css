@@ -1,187 +1,131 @@
-:root {
-    --primary-blue: #2563EB;
-    --primary-dark: #1D4ED8;
-    --accent-blue: #EFF6FF;
-    --background: #FFFFFF;
-    --card-bg: #F8FAFC;
-    --text-primary: #2563EB;
-    --text-secondary: #64748B;
-    --border: #E2E8F0;
-    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
+/* Добавьте эти стили в конец файла style.css */
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Inter', sans-serif;
+/* Рабочая область для схемы */
+#schemeWorkspace {
+    position: relative; /* Важно! Для абсолютного позиционирования внутри */
+    min-height: 300px;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 20px;
     background: var(--background);
-    color: var(--text-secondary);
-    line-height: 1.6;
+    overflow: hidden; /* Чтобы блоки не выходили за границы */
 }
 
-.container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 20px;
-}
-
-/* Шапка */
-.header {
-    background: var(--primary-blue);
-    color: white;
-    padding: 30px 0;
+/* Блоки в рабочей области */
+#schemeWorkspace .block {
+    position: absolute; /* Абсолютное позиционирование внутри workspace */
+    padding: 12px;
+    border-radius: 6px;
     text-align: center;
-    margin-bottom: 30px;
-}
-
-.logo {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: 8px;
-}
-
-.subtitle {
-    font-size: 1.2rem;
-    opacity: 0.9;
-}
-
-/* Основной контент */
-.main-content {
-    display: grid;
-    grid-template-columns: 1fr 400px;
-    gap: 30px;
-    margin-bottom: 40px;
-}
-
-/* Карточки */
-.card {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 20px;
-    box-shadow: var(--shadow);
-    border: 1px solid var(--border);
-}
-
-.card h2 {
-    color: var(--text-primary);
-    margin-bottom: 20px;
-    font-size: 1.3rem;
-    font-weight: 600;
-}
-
-/* Поля ввода */
-.input-group {
-    margin-bottom: 20px;
-}
-
-.text-input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 2px solid var(--border);
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: 'Fira Code', monospace;
-    margin-bottom: 12px;
-    transition: border-color 0.3s;
-}
-
-.text-input:focus {
-    outline: none;
-    border-color: var(--primary-blue);
-}
-
-.text-input.small {
-    width: 60%;
-}
-
-/* Кнопки */
-.btn {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
     font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s;
-    font-family: 'Inter', sans-serif;
-}
-
-.btn.primary {
-    background: var(--primary-blue);
+    font-size: 12px;
+    cursor: move;
     color: white;
-    width: 100%;
+    user-select: none;
+    min-width: 60px;
+    z-index: 10;
 }
 
-.btn.primary:hover {
-    background: var(--primary-dark);
-}
-
-.btn.secondary {
-    background: var(--accent-blue);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-}
-
-.btn.secondary:hover {
-    background: var(--primary-blue);
+/* Блоки в палитре */
+.palette .block {
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+    font-size: 12px;
+    cursor: grab;
     color: white;
+    user-select: none;
 }
 
-.btn.large {
-    padding: 16px 24px;
-    font-size: 16px;
+/* Цвета блоков */
+.and-block { background: #DC2626; }
+.or-block { background: #059669; }
+.not-block { background: #7C3AED; }
+.xor-block { background: #D97706; }
+.input-block { background: #2563EB; }
+.output-block { background: #475569; }
+
+/* Коннекторы для соединения блоков */
+.connector {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+    cursor: crosshair;
+    z-index: 20;
 }
 
-/* Особенности */
-.features {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
+.connector.input {
+    background: #EF4444;
+    left: -8px;
 }
 
-.features p {
-    margin-bottom: 8px;
-    font-size: 14px;
+.connector.output {
+    background: #10B981;
+    right: -8px;
 }
 
-/* Примеры быстрого старта */
-.examples-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.example-item {
-    background: var(--accent-blue);
-    padding: 15px;
-    border-radius: 8px;
-    border-left: 4px solid var(--primary-blue);
-    cursor: pointer;
+.connector:hover {
+    transform: scale(1.2);
     transition: transform 0.2s;
 }
 
-.example-item:hover {
-    transform: translateX(4px);
+/* Блоки переменных */
+.variable-block {
+    background: #2563EB !important;
+    min-width: 60px !important;
 }
 
-.example-expression {
-    font-family: 'Fira Code', monospace;
-    font-size: 12px;
-    color: var(--text-primary);
-    margin-bottom: 5px;
+/* Логические блоки с коннекторами */
+.and-block, .or-block, .not-block, .xor-block, .input-block, .output-block {
+    position: relative;
+    padding: 15px 25px !important;
+    min-width: 80px !important;
 }
 
-.example-desc {
-    font-size: 11px;
-    color: var(--text-secondary);
+/* Коннекторы */
+.connector {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid white;
+    cursor: crosshair;
+    z-index: 20;
+    transition: all 0.2s ease;
 }
 
-/* Блоки для схемы */
+.connector.input {
+    background: #EF4444;
+    left: -10px;
+}
+
+.connector.output {
+    background: #10B981;
+    right: -10px;
+}
+
+.connector:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 5px rgba(0,0,0,0.3);
+}
+
+/* Линии соединений */
+.connection-line {
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* Убедитесь, что блоки имеют относительное позиционирование для коннекторов */
+#schemeWorkspace .block {
+    position: absolute;
+    padding: 15px 25px !important;
+    min-width: 80px !important;
+}
+
+/* Блоки в палитре - только для перетаскивания в workspace */
 .palette {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -189,134 +133,16 @@ body {
     margin: 20px 0;
 }
 
-.block {
+.palette .block {
     padding: 12px;
     border-radius: 6px;
     text-align: center;
     font-weight: 500;
     font-size: 12px;
     cursor: grab;
-    user-select: none;
-    transition: transform 0.2s;
-}
-
-.block:active {
-    cursor: grabbing;
-}
-
-.block:hover {
-    transform: scale(1.05);
-}
-
-.and-block { background: #DC2626; color: white; }
-.or-block { background: #059669; color: white; }
-.not-block { background: #7C3AED; color: white; }
-.xor-block { background: #D97706; color: white; }
-.input-block { background: #2563EB; color: white; }
-.output-block { background: #475569; color: white; }
-
-/* Рабочая область */
-.workspace {
-    min-height: 300px;
-    border: 2px dashed var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    background: var(--background);
-}
-
-.workspace p {
-    text-align: center;
-    color: var(--text-secondary);
-}
-
-/* Таблица истинности */
-.table-container {
-    overflow-x: auto;
-}
-
-.truth-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: 'Fira Code', monospace;
-    font-size: 12px;
-}
-
-.truth-table th,
-.truth-table td {
-    padding: 10px;
-    text-align: center;
-    border: 1px solid var(--border);
-}
-
-.truth-table th {
-    background: var(--primary-blue);
     color: white;
-    font-weight: 600;
-}
-
-.truth-table tr:nth-child(even) {
-    background: var(--accent-blue);
-}
-
-/* Модальное окно */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background: white;
-    padding: 30px;
-    border-radius: 12px;
-    max-width: 500px;
-    width: 90%;
-}
-
-.modal-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin: 20px 0;
-}
-
-.expression-preview {
-    font-family: 'Fira Code', monospace;
-    background: var(--accent-blue);
-    padding: 12px;
-    border-radius: 6px;
-    margin: 15px 0;
-    font-size: 14px;
-}
-
-/* Утилиты */
-.hidden {
-    display: none !important;
-}
-
-.result-section {
-    margin-top: 20px;
-}
-
-.scheme-controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.scheme-controls .btn {
-    width: auto;
-}
-
-/* Блоки переменных */
-.variable-block {
-    background: #2563EB !important;
-    min-width: 60px !important;
+    user-select: none;
+    position: static !important; /* Убираем абсолютное позиционирование в палитре */
+    left: auto !important;
+    top: auto !important;
 }
