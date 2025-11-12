@@ -1,25 +1,6 @@
 UML диаграмма модулей: 
-Bool Trainer/
-├── 🐍 main.py (Backend Controller)
-│   ├── /api/truth_table (POST)
-│   ├── /api/normal_forms (POST) 
-│   └── / (GET) - serves frontend
-│
-├── 🎨 templates/index.html (UI Layer)
-│   ├── Input Forms
-│   ├── Results Display
-│   └── Scheme Workspace
-│
-├── ⚡ static/js/app.js (Frontend Logic)
-│   ├── Expression Parser
-│   ├── Drag & Drop System
-│   ├── Connection Manager
-│   └── API Client
-│
-└── 🎭 static/css/style.css (Presentation)
-    ├── Component Styles
-    ├── Color Scheme
-    └── Responsive Design
+<img width="974" height="656" alt="image" src="https://github.com/user-attachments/assets/0420980b-c7d4-43fa-8188-02b36b1a0b3c" />
+
 
 Назначение модулей:
  -  main.py - Бэкенд сервер
