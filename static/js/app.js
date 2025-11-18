@@ -1,27 +1,22 @@
 // static/js/app.js
 
-// Конфигурация
-const QUICK_START_EXAMPLES = [
-    { expression: "a & b", variables: "a,b", description: "Логическое И" },
-    { expression: "a | b", variables: "a,b", description: "Логическое ИЛИ" },
-    { expression: "~a", variables: "a", description: "Логическое НЕ" },
-    { expression: "a & ~b", variables: "a,b", description: "И с отрицанием" },
-    { expression: "(a & b) | (~a & c)", variables: "a,b,c", description: "Мультиплексор" },
-    { expression: "a & (b | c)", variables: "a,b,c", description: "Дистрибутивный закон" }
-];
-
-// Глобальные переменные для управления соединениями
-let isConnecting = false;
-let currentConnector = null;
-let currentBlock = null;
-let tempLine = null;
-
-// Глобальные функции для HTML onclick
+// Глобальная функция для загрузки примеров
 window.loadExample = function(expression, variables) {
     document.getElementById('expressionInput').value = expression;
     document.getElementById('variablesInput').value = variables;
     showActionModal();
 };
+
+// Глобальные переменные для управления
+let isConnecting = false;
+let currentConnector = null;
+let currentBlock = null;
+let tempLine = null;
+let isSelecting = false;
+let selectionStart = { x: 0, y: 0 };
+let selectionRect = null;
+let selectedElements = new Set();
+let connections = new Map(); // Хранит соединения между блоками
 
 // Инициализация после загрузки DOM
 document.addEventListener('DOMContentLoaded', function() {
@@ -30,18 +25,192 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function init() {
-    loadQuickStartExamples();
     setupEventListeners();
     setupDragAndDrop();
     setupVariableInputs();
     setupConnectionHandlers();
+    setupSelectionHandlers();
+    setupAutoArrange();
+    hideActionModal();
+}
+
+function setupAutoArrange() {
+    const autoArrangeBtn = document.getElementById('autoArrangeBtn');
+    if (autoArrangeBtn) {
+        autoArrangeBtn.addEventListener('click', autoArrangeBlocks);
+    }
+}
+
+function setupSelectionHandlers() {
+    const workspace = document.getElementById('schemeWorkspace');
+    if (!workspace) return;
+
+    // Начало выделения
+    workspace.addEventListener('mousedown', (e) => {
+        if (e.target === workspace || e.target.classList.contains('workspace')) {
+            if (!e.target.classList.contains('connector') && !e.target.classList.contains('block')) {
+                isSelecting = true;
+                selectionStart = { x: e.clientX, y: e.clientY };
+
+                // Создаем прямоугольник выделения
+                selectionRect = document.createElement('div');
+                selectionRect.className = 'selection-rect';
+                selectionRect.style.left = selectionStart.x + 'px';
+                selectionRect.style.top = selectionStart.y + 'px';
+                selectionRect.style.width = '0px';
+                selectionRect.style.height = '0px';
+                workspace.appendChild(selectionRect);
+
+                e.preventDefault();
+            }
+        }
+    });
+
+    // Изменение выделения
+    document.addEventListener('mousemove', (e) => {
+        if (isSelecting && selectionRect) {
+            const currentX = e.clientX;
+            const currentY = e.clientY;
+
+            const left = Math.min(selectionStart.x, currentX);
+            const top = Math.min(selectionStart.y, currentY);
+            const width = Math.abs(currentX - selectionStart.x);
+            const height = Math.abs(currentY - selectionStart.y);
+
+            selectionRect.style.left = left + 'px';
+            selectionRect.style.top = top + 'px';
+            selectionRect.style.width = width + 'px';
+            selectionRect.style.height = height + 'px';
+        }
+    });
+
+    // Завершение выделения
+    document.addEventListener('mouseup', (e) => {
+        if (isSelecting && selectionRect) {
+            isSelecting = false;
+
+            // Получаем границы выделения
+            const rect = selectionRect.getBoundingClientRect();
+
+            // Находим элементы в области выделения
+            const blocks = workspace.querySelectorAll('.block');
+            const lines = workspace.querySelectorAll('.connection-line');
+
+            selectedElements.clear();
+
+            blocks.forEach(block => {
+                const blockRect = block.getBoundingClientRect();
+                if (isRectOverlap(rect, blockRect)) {
+                    selectElement(block);
+                }
+            });
+
+            lines.forEach(line => {
+                const lineRect = line.getBoundingClientRect();
+                if (isRectOverlap(rect, lineRect)) {
+                    selectElement(line);
+                }
+            });
+
+            // Удаляем прямоугольник выделения
+            selectionRect.remove();
+            selectionRect = null;
+        }
+    });
+
+    // Очистка выделения по клику на пустом месте
+    workspace.addEventListener('click', (e) => {
+        if (e.target === workspace || e.target.classList.contains('workspace')) {
+            clearSelection();
+        }
+    });
+}
+
+function isRectOverlap(rect1, rect2) {
+    return !(rect1.right < rect2.left ||
+             rect1.left > rect2.right ||
+             rect1.bottom < rect2.top ||
+             rect1.top > rect2.bottom);
+}
+
+function selectElement(element) {
+    element.classList.add('selected');
+    selectedElements.add(element);
+}
+
+function clearSelection() {
+    selectedElements.forEach(element => {
+        element.classList.remove('selected');
+    });
+    selectedElements.clear();
 }
 
 function setupConnectionHandlers() {
     // Обработчик отмены соединения по Esc
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && isConnecting) {
-            cancelConnection();
+        if (e.key === 'Escape') {
+            if (isConnecting) {
+                cancelConnection();
+            } else {
+                clearSelection();
+            }
+        }
+
+        // Удаление выделенных элементов по Delete
+        if (e.key === 'Delete' && selectedElements.size > 0) {
+            deleteSelectedElements();
+        }
+
+        // Перемещение выделенных элементов стрелками
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            moveSelectedElements(e.key);
+        }
+    });
+}
+
+function deleteSelectedElements() {
+    selectedElements.forEach(element => {
+        if (element.classList.contains('block')) {
+            // Удаляем соединения, связанные с блоком
+            removeConnectionsForBlock(element);
+        } else if (element.classList.contains('connection-line')) {
+            // Удаляем линию соединения
+            removeConnection(element);
+        }
+        element.remove();
+    });
+    selectedElements.clear();
+}
+
+function moveSelectedElements(direction) {
+    const step = 5;
+    let dx = 0, dy = 0;
+
+    switch (direction) {
+        case 'ArrowUp': dy = -step; break;
+        case 'ArrowDown': dy = step; break;
+        case 'ArrowLeft': dx = -step; break;
+        case 'ArrowRight': dx = step; break;
+    }
+
+    selectedElements.forEach(element => {
+        if (element.classList.contains('block')) {
+            const currentLeft = parseInt(element.style.left) || 0;
+            const currentTop = parseInt(element.style.top) || 0;
+
+            const workspace = document.getElementById('schemeWorkspace');
+            const maxX = workspace.offsetWidth - element.offsetWidth - 10;
+            const maxY = workspace.offsetHeight - element.offsetHeight - 10;
+
+            const newX = Math.max(10, Math.min(currentLeft + dx, maxX));
+            const newY = Math.max(10, Math.min(currentTop + dy, maxY));
+
+            element.style.left = newX + 'px';
+            element.style.top = newY + 'px';
+
+            // Обновляем соединения для этого блока
+            updateConnectionsForBlock(element);
         }
     });
 }
@@ -71,7 +240,7 @@ function updateVariableBlocks() {
 
     // Создаем новые блоки переменных
     variables.forEach((variable, index) => {
-        createVariableBlock(variable, index * 80 + 20, 20);
+        createVariableBlock(variable, index * 100 + 20, 20);
     });
 }
 
@@ -85,41 +254,57 @@ function createVariableBlock(variableName, x, y) {
     block.draggable = true;
     block.dataset.type = 'VARIABLE';
     block.dataset.variable = variableName;
+    block.dataset.id = 'var_' + Date.now() + '_' + Math.random();
 
-    // Стиль для блоков переменных
-    block.style.position = 'absolute';
+    // Позиционирование
     block.style.left = x + 'px';
     block.style.top = y + 'px';
-    block.style.cursor = 'move';
-    block.style.zIndex = '10';
-    block.style.background = '#2563EB';
-    block.style.color = 'white';
-    block.style.padding = '10px 15px';
-    block.style.borderRadius = '6px';
-    block.style.textAlign = 'center';
-    block.style.minWidth = '50px';
 
     // Добавляем точку подключения (только выход)
     const connector = document.createElement('div');
     connector.className = 'connector output';
-    connector.style.position = 'absolute';
-    connector.style.right = '-10px';
-    connector.style.top = '50%';
-    connector.style.transform = 'translateY(-50%)';
-    connector.style.width = '16px';
-    connector.style.height = '16px';
-    connector.style.background = '#10B981';
-    connector.style.borderRadius = '50%';
-    connector.style.cursor = 'crosshair';
-    connector.style.border = '2px solid white';
-    connector.title = 'Выход';
+    connector.dataset.type = 'output';
+    connector.dataset.parentId = block.dataset.id;
 
     connector.addEventListener('mousedown', startConnection);
+    connector.addEventListener('click', (e) => e.stopPropagation());
 
     block.appendChild(connector);
     makeBlockDraggable(block, workspace);
     block.addEventListener('dragstart', handleDragStart);
+    block.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!e.ctrlKey && !e.metaKey) {
+            clearSelection();
+        }
+        selectElement(block);
+    });
+
     workspace.appendChild(block);
+    return block;
+}
+
+// Функция авто-расположения блоков
+function autoArrangeBlocks() {
+    const workspace = document.getElementById('schemeWorkspace');
+    const blocks = workspace.querySelectorAll('.block:not(.variable-block)');
+    const variableBlocks = workspace.querySelectorAll('.variable-block');
+
+    // Располагаем переменные в верхней части
+    variableBlocks.forEach((block, index) => {
+        block.style.left = (index * 120 + 20) + 'px';
+        block.style.top = '20px';
+        updateConnectionsForBlock(block);
+    });
+
+    // Располагаем логические блоки ниже
+    blocks.forEach((block, index) => {
+        const row = Math.floor(index / 3);
+        const col = index % 3;
+        block.style.left = (col * 150 + 50) + 'px';
+        block.style.top = (row * 100 + 120) + 'px';
+        updateConnectionsForBlock(block);
+    });
 }
 
 // Система соединений
@@ -139,7 +324,6 @@ function startConnection(e) {
     // Визуальное выделение
     connector.style.transform = 'scale(1.4)';
     connector.style.boxShadow = '0 0 10px #F59E0B';
-    connector.style.zIndex = '100';
 
     // Меняем курсор
     document.body.style.cursor = 'crosshair';
@@ -166,7 +350,6 @@ function onConnectionEnd(e) {
     if (currentConnector) {
         currentConnector.style.transform = '';
         currentConnector.style.boxShadow = '';
-        currentConnector.style.zIndex = '';
     }
 
     // Находим целевой коннектор
@@ -174,6 +357,7 @@ function onConnectionEnd(e) {
 
     if (targetConnector && isValidConnection(currentConnector, targetConnector)) {
         createPermanentConnection(currentConnector, targetConnector);
+        calculateSchemeTruthTable();
     } else {
         console.log('Соединение не создано');
     }
@@ -212,8 +396,21 @@ function isValidConnection(sourceConnector, targetConnector) {
         return false;
     }
 
+    // Проверяем, не соединены ли уже эти коннекторы
+    const connectionId = getConnectionId(sourceConnector, targetConnector);
+    if (connections.has(connectionId)) {
+        console.log('Ошибка: соединение уже существует');
+        return false;
+    }
+
     console.log('Валидное соединение!');
     return true;
+}
+
+function getConnectionId(connector1, connector2) {
+    const id1 = connector1.dataset.parentId + '_' + connector1.dataset.type;
+    const id2 = connector2.dataset.parentId + '_' + connector2.dataset.type;
+    return [id1, id2].sort().join('|');
 }
 
 function createPermanentConnection(sourceConnector, targetConnector) {
@@ -223,13 +420,28 @@ function createPermanentConnection(sourceConnector, targetConnector) {
     console.log(`Создано соединение: ${sourceBlock.textContent} → ${targetBlock.textContent}`);
 
     // Визуальное подтверждение
-    sourceConnector.style.background = '#059669';
-    targetConnector.style.background = '#DC2626';
+    sourceConnector.classList.add('connected');
+    targetConnector.classList.add('connected');
 
     // Создаем линию соединения
-    createConnectionLine(sourceConnector, targetConnector);
+    const line = createConnectionLine(sourceConnector, targetConnector);
 
-    updateSchemeCalculation();
+    // Сохраняем соединение
+    const connectionId = getConnectionId(sourceConnector, targetConnector);
+    connections.set(connectionId, {
+        source: sourceConnector,
+        target: targetConnector,
+        line: line
+    });
+
+    // Добавляем обработчик клика на линию
+    line.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!e.ctrlKey && !e.metaKey) {
+            clearSelection();
+        }
+        selectElement(line);
+    });
 }
 
 function createTemporaryLine(startX, startY) {
@@ -237,15 +449,7 @@ function createTemporaryLine(startX, startY) {
     if (!workspace) return;
 
     tempLine = document.createElement('div');
-    tempLine.style.cssText = `
-        position: absolute;
-        pointer-events: none;
-        z-index: 50;
-        background: #F59E0B;
-        height: 3px;
-        transform-origin: 0 0;
-    `;
-
+    tempLine.className = 'temp-line';
     workspace.appendChild(tempLine);
     updateTemporaryLine(startX, startY);
 }
@@ -293,14 +497,7 @@ function createConnectionLine(sourceConnector, targetConnector) {
 
     const line = document.createElement('div');
     line.className = 'connection-line';
-    line.style.cssText = `
-        position: absolute;
-        pointer-events: none;
-        z-index: 5;
-        background: #6B7280;
-        height: 2px;
-        transform-origin: 0 0;
-    `;
+    line.dataset.connection = getConnectionId(sourceConnector, targetConnector);
 
     const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
     const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
@@ -311,6 +508,64 @@ function createConnectionLine(sourceConnector, targetConnector) {
     line.style.transform = `rotate(${angle}deg)`;
 
     workspace.appendChild(line);
+    return line;
+}
+
+function updateConnectionsForBlock(block) {
+    const blockId = block.dataset.id;
+
+    connections.forEach((connection, connectionId) => {
+        if (connectionId.includes(blockId)) {
+            updateConnectionLine(connection.line, connection.source, connection.target);
+        }
+    });
+}
+
+function updateConnectionLine(line, sourceConnector, targetConnector) {
+    const workspace = document.getElementById('schemeWorkspace');
+    const sourceRect = sourceConnector.getBoundingClientRect();
+    const targetRect = targetConnector.getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
+
+    const startX = sourceRect.left + sourceRect.width / 2 - workspaceRect.left;
+    const startY = sourceRect.top + sourceRect.height / 2 - workspaceRect.top;
+    const endX = targetRect.left + targetRect.width / 2 - workspaceRect.left;
+    const endY = targetRect.top + targetRect.height / 2 - workspaceRect.top;
+
+    const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+    const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+
+    line.style.left = startX + 'px';
+    line.style.top = startY + 'px';
+    line.style.width = length + 'px';
+    line.style.transform = `rotate(${angle}deg)`;
+}
+
+function removeConnectionsForBlock(block) {
+    const blockId = block.dataset.id;
+    const connectionsToRemove = [];
+
+    connections.forEach((connection, connectionId) => {
+        if (connectionId.includes(blockId)) {
+            connectionsToRemove.push(connectionId);
+            connection.line.remove();
+            connection.source.classList.remove('connected');
+            connection.target.classList.remove('connected');
+        }
+    });
+
+    connectionsToRemove.forEach(id => connections.delete(id));
+}
+
+function removeConnection(line) {
+    const connectionId = line.dataset.connection;
+    const connection = connections.get(connectionId);
+
+    if (connection) {
+        connection.source.classList.remove('connected');
+        connection.target.classList.remove('connected');
+        connections.delete(connectionId);
+    }
 }
 
 function cancelConnection() {
@@ -321,7 +576,6 @@ function cancelConnection() {
     if (currentConnector) {
         currentConnector.style.transform = '';
         currentConnector.style.boxShadow = '';
-        currentConnector.style.zIndex = '';
     }
 
     document.removeEventListener('mousemove', onConnectionMove);
@@ -332,25 +586,6 @@ function cancelConnection() {
     isConnecting = false;
 }
 
-function updateSchemeCalculation() {
-    console.log('Схема обновлена');
-}
-
-function loadQuickStartExamples() {
-    const examplesContainer = document.getElementById('quickStartExamples');
-    if (!examplesContainer) {
-        console.error('Quick start examples container not found');
-        return;
-    }
-
-    examplesContainer.innerHTML = QUICK_START_EXAMPLES.map(example => `
-        <div class="example-item" onclick="loadExample('${example.expression}', '${example.variables}')">
-            <div class="example-expression">${example.expression}</div>
-            <div class="example-desc">${example.description}</div>
-        </div>
-    `).join('');
-}
-
 function setupEventListeners() {
     const quickStartBtn = document.getElementById('quickStartBtn');
     const truthTableBtn = document.getElementById('truthTableBtn');
@@ -359,6 +594,7 @@ function setupEventListeners() {
     const closeModal = document.getElementById('closeModal');
     const buildSchemeBtn = document.getElementById('buildSchemeBtn');
     const clearSchemeBtn = document.getElementById('clearSchemeBtn');
+    const calculateSchemeBtn = document.getElementById('calculateSchemeBtn');
 
     if (quickStartBtn) quickStartBtn.addEventListener('click', showActionModal);
     if (truthTableBtn) truthTableBtn.addEventListener('click', () => analyzeExpression('truth_table'));
@@ -374,6 +610,11 @@ function setupEventListeners() {
     if (closeModal) closeModal.addEventListener('click', hideActionModal);
     if (buildSchemeBtn) buildSchemeBtn.addEventListener('click', buildLogicScheme);
     if (clearSchemeBtn) clearSchemeBtn.addEventListener('click', clearSchemeWorkspace);
+
+    // Новая кнопка для расчета таблицы истинности схемы
+    if (calculateSchemeBtn) {
+        calculateSchemeBtn.addEventListener('click', calculateSchemeTruthTable);
+    }
 
     const modal = document.getElementById('actionModal');
     if (modal) {
@@ -468,6 +709,7 @@ function addLogicBlockToWorkspace(type, x, y) {
     block.textContent = type;
     block.draggable = true;
     block.dataset.type = type;
+    block.dataset.id = type.toLowerCase() + '_' + Date.now() + '_' + Math.random();
 
     block.style.position = 'absolute';
     block.style.left = Math.max(10, x - 30) + 'px';
@@ -478,64 +720,55 @@ function addLogicBlockToWorkspace(type, x, y) {
     addConnectorsToBlock(block, type);
     makeBlockDraggable(block, workspace);
     block.addEventListener('dragstart', handleDragStart);
+
+    // Добавляем обработчик клика для выделения
+    block.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!e.ctrlKey && !e.metaKey) {
+            clearSelection();
+        }
+        selectElement(block);
+    });
+
     workspace.appendChild(block);
 
     console.log(`Добавлен новый блок: ${type}`);
 }
 
 function addConnectorsToBlock(block, type) {
+    // Всегда добавляем выходной коннектор
     const outputConnector = document.createElement('div');
     outputConnector.className = 'connector output';
-    outputConnector.style.position = 'absolute';
-    outputConnector.style.right = '-10px';
-    outputConnector.style.top = '50%';
-    outputConnector.style.transform = 'translateY(-50%)';
-    outputConnector.style.width = '16px';
-    outputConnector.style.height = '16px';
-    outputConnector.style.background = '#10B981';
-    outputConnector.style.borderRadius = '50%';
-    outputConnector.style.cursor = 'crosshair';
-    outputConnector.style.border = '2px solid white';
+    outputConnector.dataset.type = 'output';
+    outputConnector.dataset.parentId = block.dataset.id;
     outputConnector.title = 'Выход';
 
     outputConnector.addEventListener('mousedown', startConnection);
+    outputConnector.addEventListener('click', (e) => e.stopPropagation());
     block.appendChild(outputConnector);
 
+    // Добавляем входные коннекторы в зависимости от типа блока
     if (type === 'NOT') {
-        addInputConnector(block, 'top');
+        addInputConnector(block, 'center');
     } else if (type === 'AND' || type === 'OR' || type === 'XOR') {
-        addInputConnector(block, 'top-10');
-        addInputConnector(block, 'bottom+10');
-    } else if (type === 'OUTPUT') {
         addInputConnector(block, 'top');
+        addInputConnector(block, 'bottom');
+    } else if (type === 'INPUT') {
+        // Блок INPUT имеет только выход
+    } else if (type === 'OUTPUT') {
+        addInputConnector(block, 'center');
     }
 }
 
 function addInputConnector(block, position) {
     const inputConnector = document.createElement('div');
-    inputConnector.className = 'connector input';
-    inputConnector.style.position = 'absolute';
-    inputConnector.style.left = '-10px';
-    inputConnector.style.width = '16px';
-    inputConnector.style.height = '16px';
-    inputConnector.style.background = '#EF4444';
-    inputConnector.style.borderRadius = '50%';
-    inputConnector.style.cursor = 'crosshair';
-    inputConnector.style.border = '2px solid white';
+    inputConnector.className = `connector input ${position}`;
+    inputConnector.dataset.type = 'input';
+    inputConnector.dataset.parentId = block.dataset.id;
     inputConnector.title = 'Вход';
 
-    if (position === 'top') {
-        inputConnector.style.top = '50%';
-        inputConnector.style.transform = 'translateY(-50%)';
-    } else if (position === 'top-10') {
-        inputConnector.style.top = 'calc(50% - 10px)';
-        inputConnector.style.transform = 'translateY(-50%)';
-    } else if (position === 'bottom+10') {
-        inputConnector.style.top = 'calc(50% + 10px)';
-        inputConnector.style.transform = 'translateY(-50%)';
-    }
-
     inputConnector.addEventListener('mousedown', startConnection);
+    inputConnector.addEventListener('click', (e) => e.stopPropagation());
     block.appendChild(inputConnector);
 }
 
@@ -589,6 +822,9 @@ function makeBlockDraggable(block, workspace) {
 
         block.style.left = newX + 'px';
         block.style.top = newY + 'px';
+
+        // Обновляем соединения при перемещении
+        updateConnectionsForBlock(block);
     }
 
     function stopDrag() {
@@ -612,8 +848,13 @@ function showActionModal() {
     }
 
     const currentExpression = document.getElementById('currentExpression');
+    const currentVariables = document.getElementById('currentVariables');
+
     if (currentExpression) {
-        currentExpression.textContent = `${expression} [${variables}]`;
+        currentExpression.textContent = expression;
+    }
+    if (currentVariables) {
+        currentVariables.textContent = variables;
     }
 
     const modal = document.getElementById('actionModal');
@@ -643,13 +884,9 @@ function buildLogicScheme() {
         workspace.innerHTML = '';
 
         const title = document.createElement('div');
-        title.style.textAlign = 'center';
-        title.style.marginBottom = '20px';
-        title.style.padding = '10px';
+        title.className = 'scheme-title';
         title.innerHTML = `
             <h3>Логическая схема для выражения: ${expression}</h3>
-            <p>Перетащите блоки из палитры и соедините их</p>
-            <p><small>Используйте точки подключения для соединения блоков</small></p>
         `;
         workspace.appendChild(title);
 
@@ -662,8 +899,90 @@ function buildLogicScheme() {
 function clearSchemeWorkspace() {
     const workspace = document.getElementById('schemeWorkspace');
     if (workspace) {
-        workspace.innerHTML = '<p>Перетащите блоки сюда для построения схемы...</p>';
+        workspace.innerHTML = '<div class="scheme-title"><h3>Перетащите блоки для построения схемы</h3></div>';
+        connections.clear();
+        selectedElements.clear();
     }
+}
+
+// Функция для расчета таблицы истинности схемы
+async function calculateSchemeTruthTable() {
+    const variables = document.getElementById('variablesInput').value;
+
+    if (!variables) {
+        alert('Пожалуйста, введите переменные');
+        return;
+    }
+
+    try {
+        // Собираем данные о схеме
+        const schemeData = collectSchemeData();
+
+        const response = await fetch('/api/calculate_scheme', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                scheme: schemeData,
+                variables: variables
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            displayTruthTable(result.table, 'Логическая схема');
+        } else {
+            throw new Error(result.error || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка расчета схемы: ' + error.message);
+    }
+}
+
+function collectSchemeData() {
+    const blocks = Array.from(document.querySelectorAll('.workspace .block'));
+    const connectionElements = Array.from(document.querySelectorAll('.connection-line'));
+
+    return {
+        blocks: blocks.map(block => ({
+            id: block.dataset.id,
+            type: block.dataset.type,
+            variable: block.dataset.variable,
+            position: {
+                x: parseInt(block.style.left) || 0,
+                y: parseInt(block.style.top) || 0
+            }
+        })),
+        connections: connectionElements.map(line => ({
+            id: line.dataset.connection,
+            points: getLinePoints(line)
+        }))
+    };
+}
+
+function getLinePoints(line) {
+    const style = line.style;
+    const angle = parseFloat(style.transform.replace('rotate(', '').replace('deg)', '')) || 0;
+    const length = parseInt(style.width) || 0;
+
+    const startX = parseInt(style.left) || 0;
+    const startY = parseInt(style.top) || 0;
+
+    // Вычисляем конечную точку на основе угла и длины
+    const rad = angle * Math.PI / 180;
+    const endX = startX + length * Math.cos(rad);
+    const endY = startY + length * Math.sin(rad);
+
+    return {
+        startX: startX,
+        startY: startY,
+        endX: endX,
+        endY: endY
+    };
 }
 
 async function analyzeExpression(type) {
@@ -768,10 +1087,10 @@ function displayNormalForms(original, cnf, dnf) {
             <strong>Исходное:</strong> ${original}
         </div>
         <div class="expression-preview">
-            <strong>КНФ:</strong> ${cnf}
+            <strong>КНФ (Конъюнктивная нормальная форма):</strong> ${cnf}
         </div>
         <div class="expression-preview">
-            <strong>ДНФ:</strong> ${dnf}
+            <strong>ДНФ (Дизъюнктивная нормальная форма):</strong> ${dnf}
         </div>
     `;
 

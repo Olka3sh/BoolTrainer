@@ -36,6 +36,9 @@
                     </div>
                 </div>
 
+                <!-- Разделитель -->
+                <hr class="section-divider">
+
                 <!-- Текущие результаты -->
                 <div class="card results-card">
                     <div id="truthTableSection" class="result-section hidden">
@@ -55,30 +58,70 @@
                 <!-- Быстрый старт -->
                 <div class="card quick-start-card">
                     <h2>Выберите выражение для быстрого старта:</h2>
-                    <div id="quickStartExamples" class="examples-grid"></div>
+                    <div id="quickStartExamples" class="examples-grid">
+                        <div class="example-item" onclick="loadExample('a & b', 'a,b')">
+                            <div class="example-expression">a & b</div>
+                            <div class="example-desc">Логическое И</div>
+                        </div>
+
+                        <div class="example-item" onclick="loadExample('a | b', 'a,b')">
+                            <div class="example-expression">a | b</div>
+                            <div class="example-desc">Логическое ИЛИ</div>
+                        </div>
+
+                        <div class="example-item" onclick="loadExample('~a', 'a')">
+                            <div class="example-expression">~a</div>
+                            <div class="example-desc">Логическое НЕ</div>
+                        </div>
+
+                        <div class="example-item" onclick="loadExample('a ^ b', 'a,b')">
+                            <div class="example-expression">a ^ b</div>
+                            <div class="example-desc">Исключающее ИЛИ</div>
+                        </div>
+
+                        <div class="example-item" onclick="loadExample('a & ~b', 'a,b')">
+                            <div class="example-expression">a & ~b</div>
+                            <div class="example-desc">И с инверсией</div>
+                        </div>
+
+                        <div class="example-item" onclick="loadExample('(a & b) | c', 'a,b,c')">
+                            <div class="example-expression">(a & b) | c</div>
+                            <div class="example-desc">Комбинированное выражение</div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Разделитель -->
+                <hr class="section-divider">
 
                 <!-- Логическая схема -->
                 <div class="card scheme-card">
                     <h2>Логическая схема</h2>
+
                     <div class="scheme-controls">
                         <button id="buildSchemeBtn" class="btn secondary">Построить схему</button>
-                        <button id="clearSchemeBtn" class="btn secondary">Очистить</button>
+                        <button id="calculateSchemeBtn" class="btn primary">Рассчитать таблицу истинности</button>
+                        <button id="clearSchemeBtn" class="btn secondary">Очистить схему</button>
+                        <button id="autoArrangeBtn" class="btn secondary">Авто-расположение</button>
                     </div>
 
                     <!-- Палитра блоков -->
                     <div class="palette">
-                        <div class="block and-block" draggable="true" data-type="AND">AND</div>
-                        <div class="block or-block" draggable="true" data-type="OR">OR</div>
-                        <div class="block not-block" draggable="true" data-type="NOT">NOT</div>
-                        <div class="block xor-block" draggable="true" data-type="XOR">XOR</div>
-                        <div class="block input-block" draggable="true" data-type="INPUT">INPUT</div>
-                        <div class="block output-block" draggable="true" data-type="OUTPUT">OUTPUT</div>
+                        <div class="block and-block" draggable="true" data-type="AND" title="Логическое И">AND (&)</div>
+                        <div class="block or-block" draggable="true" data-type="OR" title="Логическое ИЛИ">OR (|)</div>
+                        <div class="block not-block" draggable="true" data-type="NOT" title="Логическое НЕ">NOT (~)</div>
+                        <div class="block xor-block" draggable="true" data-type="XOR" title="Исключающее ИЛИ">XOR (^)</div>
+                        <div class="block input-block" draggable="true" data-type="INPUT" title="Входной сигнал">INPUT</div>
+                        <div class="block output-block" draggable="true" data-type="OUTPUT" title="Выходной сигнал">OUTPUT</div>
                     </div>
 
-                    <!-- Рабочая область для схемы -->
-                    <div id="schemeWorkspace" class="workspace">
-                        <p>Перетащите блоки сюда для построения схемы...</p>
+                    <!-- Рабочая область схемы -->
+                    <div class="workspace-container">
+                        <div id="schemeWorkspace" class="workspace">
+                            <div class="scheme-title">
+                                <h3>Перетащите блоки для построения схемы</h3>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -88,13 +131,37 @@
         <div id="actionModal" class="modal hidden">
             <div class="modal-content">
                 <h3>Выберите действие для выражения</h3>
-                <p id="currentExpression" class="expression-preview"></p>
-                <div class="modal-actions">
-                    <button id="truthTableBtn" class="btn primary large">📊 Построить таблицу истинности</button>
-                    <button id="transformBtn" class="btn primary large">⚡ Преобразовать выражение</button>
-                    <button id="schemeBtn" class="btn primary large">🔌 Построить логическую схему</button>
+                <div class="expression-preview">
+                    <strong>Выражение:</strong> <span id="currentExpression"></span><br>
+                    <strong>Переменные:</strong> <span id="currentVariables"></span>
                 </div>
-                <button id="closeModal" class="btn secondary">Отмена</button>
+
+                <div class="action-buttons">
+                    <button id="truthTableBtn" class="btn primary large">
+                        <span class="icon">📊</span>
+                        <div class="button-content">
+                            <span class="text">Построить таблицу истинности</span>
+                        </div>
+                    </button>
+
+                    <button id="transformBtn" class="btn primary large">
+                        <span class="icon">⚡</span>
+                        <div class="button-content">
+                            <span class="text">Преобразовать выражение</span>
+                        </div>
+                    </button>
+
+                    <button id="schemeBtn" class="btn primary large">
+                        <span class="icon">🔌</span>
+                        <div class="button-content">
+                            <span class="text">Построить логическую схему</span>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="modal-footer">
+                    <button id="closeModal" class="btn secondary">Отмена</button>
+                </div>
             </div>
         </div>
     </div>

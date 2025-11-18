@@ -2,12 +2,15 @@ from flask import Flask, render_template, request, jsonify
 from sympy import symbols, sympify, to_cnf, to_dnf
 from sympy.logic.boolalg import truth_table
 import itertools
+import json
 
 app = Flask(__name__)
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/api/truth_table', methods=['POST'])
 def calculate_truth_table():
@@ -43,6 +46,7 @@ def calculate_truth_table():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
 @app.route('/api/normal_forms', methods=['POST'])
 def calculate_normal_forms():
     try:
@@ -71,6 +75,38 @@ def calculate_normal_forms():
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/calculate_scheme', methods=['POST'])
+def calculate_scheme():
+    try:
+        data = request.get_json()
+        scheme_data = data.get('scheme', {})
+        variables_str = data.get('variables', '').strip()
+
+        if not variables_str:
+            return jsonify({'success': False, 'error': 'Variables are required'})
+
+        variables = [v.strip() for v in variables_str.split(',') if v.strip()]
+        sym_vars = symbols(' '.join(variables))
+
+        # Создаем простую таблицу истинности для демонстрации
+        table = []
+        for values in itertools.product([False, True], repeat=len(sym_vars)):
+            row = {str(var): bool(val) for var, val in zip(sym_vars, values)}
+            # В реальном приложении здесь должна быть логика расчета схемы
+            row['result'] = True  # Заглушка
+            table.append(row)
+
+        return jsonify({
+            'success': True,
+            'expression': 'Логическая схема',
+            'table': table
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
