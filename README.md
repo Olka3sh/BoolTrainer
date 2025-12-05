@@ -1,5 +1,7 @@
 UML диаграмма модулей: 
-<img width="974" height="656" alt="image" src="https://github.com/user-attachments/assets/0420980b-c7d4-43fa-8188-02b36b1a0b3c" />
+<img width="3450" height="5350" alt="UML" src="https://github.com/user-attachments/assets/45c94bd1-fcea-4f0d-9f9a-642781dce0fd" />
+
+
 
 
 Назначение модулей:
