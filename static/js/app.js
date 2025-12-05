@@ -1,1050 +1,436 @@
 // static/js/app.js
 
-// Глобальная функция для загрузки примеров
-window.loadExample = function(expression, variables) {
-    document.getElementById('expressionInput').value = expression;
-    document.getElementById('variablesInput').value = variables;
-    showActionModal();
-};
-
-// Глобальные переменные для управления
-let isConnecting = false;
-let currentConnector = null;
-let currentBlock = null;
-let tempLine = null;
-let isSelecting = false;
-let selectionStart = { x: 0, y: 0 };
-let selectionRect = null;
-let selectedElements = new Set();
-let connections = new Map(); // Хранит соединения между блоками
-
-// Инициализация после загрузки DOM
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('BoolTrainer initialized');
-    init();
-});
-
-function init() {
-    setupEventListeners();
-    setupDragAndDrop();
-    setupVariableInputs();
-    setupConnectionHandlers();
-    setupSelectionHandlers();
-    setupAutoArrange();
-    hideActionModal();
-}
-
-function setupAutoArrange() {
-    const autoArrangeBtn = document.getElementById('autoArrangeBtn');
-    if (autoArrangeBtn) {
-        autoArrangeBtn.addEventListener('click', autoArrangeBlocks);
+class BoolTrainerApp {
+    constructor() {
+        this.schemeManager = new SchemeManager('schemeWorkspace');
+        this.uiController = new UIController();
+        this.isInitialized = false;
+        this.isConnecting = false;           // Переменные для управления соединениями
+        this.currentConnector = null;
+        this.tempLine = null;
+        this.selectedElements = new Set();
     }
-}
 
-function setupSelectionHandlers() {
-    const workspace = document.getElementById('schemeWorkspace');
-    if (!workspace) return;
+    init() {
+        if (this.isInitialized) return;
+        this.setupGlobalFunctions();
+        this.uiController.setupEventListeners();
+        this.setupSchemeHandlers();
+        this.setupConnectionHandlers();
+        this.setupSelectionHandlers();
+        this.setupDragAndDrop();
+        this.setupVariableInputs();
+        this.initializePalette();
+        this.hideActionModal();
+        this.isInitialized = true;
+        console.log('BoolTrainer initialized');
+    }
 
-    // Начало выделения
-    workspace.addEventListener('mousedown', (e) => {
-        if (e.target === workspace || e.target.classList.contains('workspace')) {
-            if (!e.target.classList.contains('connector') && !e.target.classList.contains('block')) {
-                isSelecting = true;
-                selectionStart = { x: e.clientX, y: e.clientY };
+    setupGlobalFunctions() {
+        window.loadExample = (expression, variables) => {
+            document.getElementById('expressionInput').value = expression;
+            document.getElementById('variablesInput').value = variables;
+            this.showActionModal();
+        };
+    }
 
-                // Создаем прямоугольник выделения
-                selectionRect = document.createElement('div');
-                selectionRect.className = 'selection-rect';
-                selectionRect.style.left = selectionStart.x + 'px';
-                selectionRect.style.top = selectionStart.y + 'px';
-                selectionRect.style.width = '0px';
-                selectionRect.style.height = '0px';
-                workspace.appendChild(selectionRect);
+    setupSchemeHandlers() {
+        document.getElementById('buildSchemeBtn').addEventListener('click', () => this.buildLogicScheme());
+        document.getElementById('calculateSchemeBtn').addEventListener('click', () => this.calculateSchemeTruthTable());
+        document.getElementById('clearSchemeBtn').addEventListener('click', () => this.clearSchemeWorkspace());
+    }
 
-                e.preventDefault();
+    setupConnectionHandlers() {
+        const workspace = document.getElementById('schemeWorkspace');
+        workspace.addEventListener('mousedown', (e) => {                         // Обработчик начала соединения
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                return;
             }
-        }
-    });
-
-    // Изменение выделения
-    document.addEventListener('mousemove', (e) => {
-        if (isSelecting && selectionRect) {
-            const currentX = e.clientX;
-            const currentY = e.clientY;
-
-            const left = Math.min(selectionStart.x, currentX);
-            const top = Math.min(selectionStart.y, currentY);
-            const width = Math.abs(currentX - selectionStart.x);
-            const height = Math.abs(currentY - selectionStart.y);
-
-            selectionRect.style.left = left + 'px';
-            selectionRect.style.top = top + 'px';
-            selectionRect.style.width = width + 'px';
-            selectionRect.style.height = height + 'px';
-        }
-    });
-
-    // Завершение выделения
-    document.addEventListener('mouseup', (e) => {
-        if (isSelecting && selectionRect) {
-            isSelecting = false;
-
-            // Получаем границы выделения
-            const rect = selectionRect.getBoundingClientRect();
-
-            // Находим элементы в области выделения
-            const blocks = workspace.querySelectorAll('.block');
-            const lines = workspace.querySelectorAll('.connection-line');
-
-            selectedElements.clear();
-
-            blocks.forEach(block => {
-                const blockRect = block.getBoundingClientRect();
-                if (isRectOverlap(rect, blockRect)) {
-                    selectElement(block);
-                }
-            });
-
-            lines.forEach(line => {
-                const lineRect = line.getBoundingClientRect();
-                if (isRectOverlap(rect, lineRect)) {
-                    selectElement(line);
-                }
-            });
-
-            // Удаляем прямоугольник выделения
-            selectionRect.remove();
-            selectionRect = null;
-        }
-    });
-
-    // Очистка выделения по клику на пустом месте
-    workspace.addEventListener('click', (e) => {
-        if (e.target === workspace || e.target.classList.contains('workspace')) {
-            clearSelection();
-        }
-    });
-}
-
-function isRectOverlap(rect1, rect2) {
-    return !(rect1.right < rect2.left ||
-             rect1.left > rect2.right ||
-             rect1.bottom < rect2.top ||
-             rect1.top > rect2.bottom);
-}
-
-function selectElement(element) {
-    element.classList.add('selected');
-    selectedElements.add(element);
-}
-
-function clearSelection() {
-    selectedElements.forEach(element => {
-        element.classList.remove('selected');
-    });
-    selectedElements.clear();
-}
-
-function setupConnectionHandlers() {
-    // Обработчик отмены соединения по Esc
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            if (isConnecting) {
-                cancelConnection();
-            } else {
-                clearSelection();
-            }
-        }
-
-        // Удаление выделенных элементов по Delete
-        if (e.key === 'Delete' && selectedElements.size > 0) {
-            deleteSelectedElements();
-        }
-
-        // Перемещение выделенных элементов стрелками
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            e.preventDefault();
-            moveSelectedElements(e.key);
-        }
-    });
-}
-
-function deleteSelectedElements() {
-    selectedElements.forEach(element => {
-        if (element.classList.contains('block')) {
-            // Удаляем соединения, связанные с блоком
-            removeConnectionsForBlock(element);
-        } else if (element.classList.contains('connection-line')) {
-            // Удаляем линию соединения
-            removeConnection(element);
-        }
-        element.remove();
-    });
-    selectedElements.clear();
-}
-
-function moveSelectedElements(direction) {
-    const step = 5;
-    let dx = 0, dy = 0;
-
-    switch (direction) {
-        case 'ArrowUp': dy = -step; break;
-        case 'ArrowDown': dy = step; break;
-        case 'ArrowLeft': dx = -step; break;
-        case 'ArrowRight': dx = step; break;
-    }
-
-    selectedElements.forEach(element => {
-        if (element.classList.contains('block')) {
-            const currentLeft = parseInt(element.style.left) || 0;
-            const currentTop = parseInt(element.style.top) || 0;
-
-            const workspace = document.getElementById('schemeWorkspace');
-            const maxX = workspace.offsetWidth - element.offsetWidth - 10;
-            const maxY = workspace.offsetHeight - element.offsetHeight - 10;
-
-            const newX = Math.max(10, Math.min(currentLeft + dx, maxX));
-            const newY = Math.max(10, Math.min(currentTop + dy, maxY));
-
-            element.style.left = newX + 'px';
-            element.style.top = newY + 'px';
-
-            // Обновляем соединения для этого блока
-            updateConnectionsForBlock(element);
-        }
-    });
-}
-
-function setupVariableInputs() {
-    const variablesInput = document.getElementById('variablesInput');
-    if (variablesInput) {
-        variablesInput.addEventListener('change', updateVariableBlocks);
-        variablesInput.addEventListener('blur', updateVariableBlocks);
-    }
-}
-
-function updateVariableBlocks() {
-    const variablesInput = document.getElementById('variablesInput');
-    const workspace = document.getElementById('schemeWorkspace');
-
-    if (!variablesInput || !workspace) return;
-
-    const variablesText = variablesInput.value.trim();
-    if (!variablesText) return;
-
-    const variables = variablesText.split(',').map(v => v.trim()).filter(v => v);
-
-    // Удаляем старые блоки переменных
-    const oldVarBlocks = workspace.querySelectorAll('.variable-block');
-    oldVarBlocks.forEach(block => block.remove());
-
-    // Создаем новые блоки переменных
-    variables.forEach((variable, index) => {
-        createVariableBlock(variable, index * 100 + 20, 20);
-    });
-}
-
-function createVariableBlock(variableName, x, y) {
-    const workspace = document.getElementById('schemeWorkspace');
-    if (!workspace) return;
-
-    const block = document.createElement('div');
-    block.className = 'block variable-block';
-    block.textContent = variableName;
-    block.draggable = true;
-    block.dataset.type = 'VARIABLE';
-    block.dataset.variable = variableName;
-    block.dataset.id = 'var_' + Date.now() + '_' + Math.random();
-
-    // Позиционирование
-    block.style.left = x + 'px';
-    block.style.top = y + 'px';
-
-    // Добавляем точку подключения (только выход)
-    const connector = document.createElement('div');
-    connector.className = 'connector output';
-    connector.dataset.type = 'output';
-    connector.dataset.parentId = block.dataset.id;
-
-    connector.addEventListener('mousedown', startConnection);
-    connector.addEventListener('click', (e) => e.stopPropagation());
-
-    block.appendChild(connector);
-    makeBlockDraggable(block, workspace);
-    block.addEventListener('dragstart', handleDragStart);
-    block.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!e.ctrlKey && !e.metaKey) {
-            clearSelection();
-        }
-        selectElement(block);
-    });
-
-    workspace.appendChild(block);
-    return block;
-}
-
-// Функция авто-расположения блоков
-function autoArrangeBlocks() {
-    const workspace = document.getElementById('schemeWorkspace');
-    const blocks = workspace.querySelectorAll('.block:not(.variable-block)');
-    const variableBlocks = workspace.querySelectorAll('.variable-block');
-
-    // Располагаем переменные в верхней части
-    variableBlocks.forEach((block, index) => {
-        block.style.left = (index * 120 + 20) + 'px';
-        block.style.top = '20px';
-        updateConnectionsForBlock(block);
-    });
-
-    // Располагаем логические блоки ниже
-    blocks.forEach((block, index) => {
-        const row = Math.floor(index / 3);
-        const col = index % 3;
-        block.style.left = (col * 150 + 50) + 'px';
-        block.style.top = (row * 100 + 120) + 'px';
-        updateConnectionsForBlock(block);
-    });
-}
-
-// Система соединений
-function startConnection(e) {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const connector = e.target;
-    const block = connector.parentElement;
-
-    console.log('Начинаем соединение от:', block.textContent);
-
-    isConnecting = true;
-    currentConnector = connector;
-    currentBlock = block;
-
-    // Визуальное выделение
-    connector.style.transform = 'scale(1.4)';
-    connector.style.boxShadow = '0 0 10px #F59E0B';
-
-    // Меняем курсор
-    document.body.style.cursor = 'crosshair';
-
-    // Добавляем временную линию
-    createTemporaryLine(e.clientX, e.clientY);
-
-    document.addEventListener('mousemove', onConnectionMove);
-    document.addEventListener('mouseup', onConnectionEnd);
-}
-
-function onConnectionMove(e) {
-    if (!isConnecting) return;
-    updateTemporaryLine(e.clientX, e.clientY);
-}
-
-function onConnectionEnd(e) {
-    if (!isConnecting) return;
-
-    // Восстанавливаем состояние
-    document.body.style.cursor = '';
-    removeTemporaryLine();
-
-    if (currentConnector) {
-        currentConnector.style.transform = '';
-        currentConnector.style.boxShadow = '';
-    }
-
-    // Находим целевой коннектор
-    const targetConnector = findConnectorAtPoint(e.clientX, e.clientY);
-
-    if (targetConnector && isValidConnection(currentConnector, targetConnector)) {
-        createPermanentConnection(currentConnector, targetConnector);
-        calculateSchemeTruthTable();
-    } else {
-        console.log('Соединение не создано');
-    }
-
-    // Очищаем
-    document.removeEventListener('mousemove', onConnectionMove);
-    document.removeEventListener('mouseup', onConnectionEnd);
-    currentConnector = null;
-    currentBlock = null;
-    isConnecting = false;
-}
-
-function findConnectorAtPoint(x, y) {
-    const elements = document.elementsFromPoint(x, y);
-
-    for (let element of elements) {
-        if (element.classList.contains('connector') && element !== currentConnector) {
-            console.log('Найден целевой коннектор:', element.className);
-            return element;
-        }
-    }
-    return null;
-}
-
-function isValidConnection(sourceConnector, targetConnector) {
-    const isSourceOutput = sourceConnector.classList.contains('output');
-    const isTargetInput = targetConnector.classList.contains('input');
-
-    if (!isSourceOutput || !isTargetInput) {
-        console.log('Ошибка: можно соединять только ВЫХОД с ВХОДОМ');
-        return false;
-    }
-
-    if (sourceConnector.parentElement === targetConnector.parentElement) {
-        console.log('Ошибка: нельзя соединять блок с самим собой');
-        return false;
-    }
-
-    // Проверяем, не соединены ли уже эти коннекторы
-    const connectionId = getConnectionId(sourceConnector, targetConnector);
-    if (connections.has(connectionId)) {
-        console.log('Ошибка: соединение уже существует');
-        return false;
-    }
-
-    console.log('Валидное соединение!');
-    return true;
-}
-
-function getConnectionId(connector1, connector2) {
-    const id1 = connector1.dataset.parentId + '_' + connector1.dataset.type;
-    const id2 = connector2.dataset.parentId + '_' + connector2.dataset.type;
-    return [id1, id2].sort().join('|');
-}
-
-function createPermanentConnection(sourceConnector, targetConnector) {
-    const sourceBlock = sourceConnector.parentElement;
-    const targetBlock = targetConnector.parentElement;
-
-    console.log(`Создано соединение: ${sourceBlock.textContent} → ${targetBlock.textContent}`);
-
-    // Визуальное подтверждение
-    sourceConnector.classList.add('connected');
-    targetConnector.classList.add('connected');
-
-    // Создаем линию соединения
-    const line = createConnectionLine(sourceConnector, targetConnector);
-
-    // Сохраняем соединение
-    const connectionId = getConnectionId(sourceConnector, targetConnector);
-    connections.set(connectionId, {
-        source: sourceConnector,
-        target: targetConnector,
-        line: line
-    });
-
-    // Добавляем обработчик клика на линию
-    line.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!e.ctrlKey && !e.metaKey) {
-            clearSelection();
-        }
-        selectElement(line);
-    });
-}
-
-function createTemporaryLine(startX, startY) {
-    const workspace = document.getElementById('schemeWorkspace');
-    if (!workspace) return;
-
-    tempLine = document.createElement('div');
-    tempLine.className = 'temp-line';
-    workspace.appendChild(tempLine);
-    updateTemporaryLine(startX, startY);
-}
-
-function updateTemporaryLine(x, y) {
-    if (!tempLine || !currentConnector) return;
-
-    const workspace = document.getElementById('schemeWorkspace');
-    const connectorRect = currentConnector.getBoundingClientRect();
-    const workspaceRect = workspace.getBoundingClientRect();
-
-    const startX = connectorRect.left + connectorRect.width / 2 - workspaceRect.left;
-    const startY = connectorRect.top + connectorRect.height / 2 - workspaceRect.top;
-    const endX = x - workspaceRect.left;
-    const endY = y - workspaceRect.top;
-
-    const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-    const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
-
-    tempLine.style.left = startX + 'px';
-    tempLine.style.top = startY + 'px';
-    tempLine.style.width = length + 'px';
-    tempLine.style.transform = `rotate(${angle}deg)`;
-}
-
-function removeTemporaryLine() {
-    if (tempLine) {
-        tempLine.remove();
-        tempLine = null;
-    }
-}
-
-function createConnectionLine(sourceConnector, targetConnector) {
-    const workspace = document.getElementById('schemeWorkspace');
-    if (!workspace) return;
-
-    const sourceRect = sourceConnector.getBoundingClientRect();
-    const targetRect = targetConnector.getBoundingClientRect();
-    const workspaceRect = workspace.getBoundingClientRect();
-
-    const startX = sourceRect.left + sourceRect.width / 2 - workspaceRect.left;
-    const startY = sourceRect.top + sourceRect.height / 2 - workspaceRect.top;
-    const endX = targetRect.left + targetRect.width / 2 - workspaceRect.left;
-    const endY = targetRect.top + targetRect.height / 2 - workspaceRect.top;
-
-    const line = document.createElement('div');
-    line.className = 'connection-line';
-    line.dataset.connection = getConnectionId(sourceConnector, targetConnector);
-
-    const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-    const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
-
-    line.style.left = startX + 'px';
-    line.style.top = startY + 'px';
-    line.style.width = length + 'px';
-    line.style.transform = `rotate(${angle}deg)`;
-
-    workspace.appendChild(line);
-    return line;
-}
-
-function updateConnectionsForBlock(block) {
-    const blockId = block.dataset.id;
-
-    connections.forEach((connection, connectionId) => {
-        if (connectionId.includes(blockId)) {
-            updateConnectionLine(connection.line, connection.source, connection.target);
-        }
-    });
-}
-
-function updateConnectionLine(line, sourceConnector, targetConnector) {
-    const workspace = document.getElementById('schemeWorkspace');
-    const sourceRect = sourceConnector.getBoundingClientRect();
-    const targetRect = targetConnector.getBoundingClientRect();
-    const workspaceRect = workspace.getBoundingClientRect();
-
-    const startX = sourceRect.left + sourceRect.width / 2 - workspaceRect.left;
-    const startY = sourceRect.top + sourceRect.height / 2 - workspaceRect.top;
-    const endX = targetRect.left + targetRect.width / 2 - workspaceRect.left;
-    const endY = targetRect.top + targetRect.height / 2 - workspaceRect.top;
-
-    const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-    const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
-
-    line.style.left = startX + 'px';
-    line.style.top = startY + 'px';
-    line.style.width = length + 'px';
-    line.style.transform = `rotate(${angle}deg)`;
-}
-
-function removeConnectionsForBlock(block) {
-    const blockId = block.dataset.id;
-    const connectionsToRemove = [];
-
-    connections.forEach((connection, connectionId) => {
-        if (connectionId.includes(blockId)) {
-            connectionsToRemove.push(connectionId);
-            connection.line.remove();
-            connection.source.classList.remove('connected');
-            connection.target.classList.remove('connected');
-        }
-    });
-
-    connectionsToRemove.forEach(id => connections.delete(id));
-}
-
-function removeConnection(line) {
-    const connectionId = line.dataset.connection;
-    const connection = connections.get(connectionId);
-
-    if (connection) {
-        connection.source.classList.remove('connected');
-        connection.target.classList.remove('connected');
-        connections.delete(connectionId);
-    }
-}
-
-function cancelConnection() {
-    console.log('Отмена соединения');
-    document.body.style.cursor = '';
-    removeTemporaryLine();
-
-    if (currentConnector) {
-        currentConnector.style.transform = '';
-        currentConnector.style.boxShadow = '';
-    }
-
-    document.removeEventListener('mousemove', onConnectionMove);
-    document.removeEventListener('mouseup', onConnectionEnd);
-
-    currentConnector = null;
-    currentBlock = null;
-    isConnecting = false;
-}
-
-function setupEventListeners() {
-    const quickStartBtn = document.getElementById('quickStartBtn');
-    const truthTableBtn = document.getElementById('truthTableBtn');
-    const transformBtn = document.getElementById('transformBtn');
-    const schemeBtn = document.getElementById('schemeBtn');
-    const closeModal = document.getElementById('closeModal');
-    const buildSchemeBtn = document.getElementById('buildSchemeBtn');
-    const clearSchemeBtn = document.getElementById('clearSchemeBtn');
-    const calculateSchemeBtn = document.getElementById('calculateSchemeBtn');
-
-    if (quickStartBtn) quickStartBtn.addEventListener('click', showActionModal);
-    if (truthTableBtn) truthTableBtn.addEventListener('click', () => analyzeExpression('truth_table'));
-    if (transformBtn) transformBtn.addEventListener('click', () => analyzeExpression('transform'));
-
-    if (schemeBtn) {
-        schemeBtn.addEventListener('click', function() {
-            hideActionModal();
-            buildLogicScheme();
-        });
-    }
-
-    if (closeModal) closeModal.addEventListener('click', hideActionModal);
-    if (buildSchemeBtn) buildSchemeBtn.addEventListener('click', buildLogicScheme);
-    if (clearSchemeBtn) clearSchemeBtn.addEventListener('click', clearSchemeWorkspace);
-
-    // Новая кнопка для расчета таблицы истинности схемы
-    if (calculateSchemeBtn) {
-        calculateSchemeBtn.addEventListener('click', calculateSchemeTruthTable);
-    }
-
-    const modal = document.getElementById('actionModal');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) hideActionModal();
-        });
-    }
-}
-
-function setupDragAndDrop() {
-    const blocks = document.querySelectorAll('.palette .block');
-    const workspace = document.getElementById('schemeWorkspace');
-
-    blocks.forEach(block => {
-        block.addEventListener('dragstart', handleDragStart);
-    });
-
-    if (workspace) {
-        workspace.addEventListener('dragover', handleDragOver);
-        workspace.addEventListener('drop', handleDrop);
-
-        workspace.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            workspace.style.backgroundColor = '#f0f9ff';
-            workspace.style.borderColor = '#2563EB';
-        });
-
-        workspace.addEventListener('dragleave', (e) => {
-            if (!workspace.contains(e.relatedTarget)) {
-                workspace.style.backgroundColor = '';
-                workspace.style.borderColor = '';
+            if (e.target.classList.contains('connector')) {
+                this.startConnection(e);
             }
         });
+        document.addEventListener('mousemove', (e) => {              // Обработчик движения мыши
+            if (this.isConnecting) {
+                this.updateTempLine(e);
+            }
+        });
+        document.addEventListener('mouseup', (e) => {               // Обработчик окончания соединения
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                return;
+            }
 
-        workspace.addEventListener('drop', (e) => {
-            workspace.style.backgroundColor = '';
-            workspace.style.borderColor = '';
+            if (this.isConnecting) {
+                this.finishConnection(e);
+            }
+        });
+        document.addEventListener('keydown', (e) => {              // Отмена соединения по ESC
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            if (e.key === 'Escape' && this.isConnecting) {
+                this.cancelConnection();
+            }
         });
     }
-}
 
-function handleDragStart(e) {
-    const blockType = e.target.dataset.type;
-    const isFromPalette = e.target.parentElement.classList.contains('palette');
-
-    e.dataTransfer.setData('text/plain', blockType);
-    e.dataTransfer.setData('from-palette', isFromPalette);
-    e.dataTransfer.effectAllowed = 'move';
-
-    if (isFromPalette) {
-        e.target.style.opacity = '0.4';
-        setTimeout(() => {
-            e.target.style.opacity = '1';
-        }, 0);
-    } else {
-        e.target.style.opacity = '0.7';
-    }
-}
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    const blockType = e.dataTransfer.getData('text/plain');
-    const fromPalette = e.dataTransfer.getData('from-palette') === 'true';
-
-    const workspace = document.getElementById('schemeWorkspace');
-    const rect = workspace.getBoundingClientRect();
-
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    if (fromPalette) {
-        addLogicBlockToWorkspace(blockType, x, y);
-    }
-}
-
-function addLogicBlockToWorkspace(type, x, y) {
-    const workspace = document.getElementById('schemeWorkspace');
-    if (!workspace) return;
-
-    if (type === 'VARIABLE') {
-        console.log('Нельзя создавать переменные через перетаскивание');
-        return;
-    }
-
-    const block = document.createElement('div');
-    block.className = `block ${type.toLowerCase()}-block`;
-    block.textContent = type;
-    block.draggable = true;
-    block.dataset.type = type;
-    block.dataset.id = type.toLowerCase() + '_' + Date.now() + '_' + Math.random();
-
-    block.style.position = 'absolute';
-    block.style.left = Math.max(10, x - 30) + 'px';
-    block.style.top = Math.max(10, y - 15) + 'px';
-    block.style.cursor = 'move';
-    block.style.zIndex = '10';
-
-    addConnectorsToBlock(block, type);
-    makeBlockDraggable(block, workspace);
-    block.addEventListener('dragstart', handleDragStart);
-
-    // Добавляем обработчик клика для выделения
-    block.addEventListener('click', (e) => {
+    startConnection(e) {
         e.stopPropagation();
-        if (!e.ctrlKey && !e.metaKey) {
-            clearSelection();
-        }
-        selectElement(block);
-    });
-
-    workspace.appendChild(block);
-
-    console.log(`Добавлен новый блок: ${type}`);
-}
-
-function addConnectorsToBlock(block, type) {
-    // Всегда добавляем выходной коннектор
-    const outputConnector = document.createElement('div');
-    outputConnector.className = 'connector output';
-    outputConnector.dataset.type = 'output';
-    outputConnector.dataset.parentId = block.dataset.id;
-    outputConnector.title = 'Выход';
-
-    outputConnector.addEventListener('mousedown', startConnection);
-    outputConnector.addEventListener('click', (e) => e.stopPropagation());
-    block.appendChild(outputConnector);
-
-    // Добавляем входные коннекторы в зависимости от типа блока
-    if (type === 'NOT') {
-        addInputConnector(block, 'center');
-    } else if (type === 'AND' || type === 'OR' || type === 'XOR') {
-        addInputConnector(block, 'top');
-        addInputConnector(block, 'bottom');
-    } else if (type === 'INPUT') {
-        // Блок INPUT имеет только выход
-    } else if (type === 'OUTPUT') {
-        addInputConnector(block, 'center');
+        e.preventDefault();
+        console.log('🟢 Start connection from:', e.target);
+        this.isConnecting = true;
+        this.currentConnector = e.target;
+        this.createTempLine(e.clientX, e.clientY);        // Создаем временную линию
     }
-}
 
-function addInputConnector(block, position) {
-    const inputConnector = document.createElement('div');
-    inputConnector.className = `connector input ${position}`;
-    inputConnector.dataset.type = 'input';
-    inputConnector.dataset.parentId = block.dataset.id;
-    inputConnector.title = 'Вход';
+    createTempLine(x, y) {
+        this.tempLine = document.createElement('div');
+        this.tempLine.className = 'temp-line';
+        document.getElementById('schemeWorkspace').appendChild(this.tempLine);
+        this.updateTempLine({ clientX: x, clientY: y });
+    }
 
-    inputConnector.addEventListener('mousedown', startConnection);
-    inputConnector.addEventListener('click', (e) => e.stopPropagation());
-    block.appendChild(inputConnector);
-}
-
-function makeBlockDraggable(block, workspace) {
-    let isDragging = false;
-    let startX, startY, initialX, initialY;
-
-    block.addEventListener('mousedown', startDrag);
-
-    function startDrag(e) {
-        if (e.target.classList.contains('connector')) {
-            return;
-        }
-
-        if (e.button !== 0) return;
-
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-
-        const rect = block.getBoundingClientRect();
+    updateTempLine(e) {
+        if (!this.tempLine || !this.currentConnector) return;
+        const workspace = document.getElementById('schemeWorkspace');
+        const connectorRect = this.currentConnector.getBoundingClientRect();
         const workspaceRect = workspace.getBoundingClientRect();
+        const startX = connectorRect.left + connectorRect.width / 2 - workspaceRect.left;
+        const startY = connectorRect.top + connectorRect.height / 2 - workspaceRect.top;
+        const endX = e.clientX - workspaceRect.left;
+        const endY = e.clientY - workspaceRect.top;
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        this.tempLine.style.left = startX + 'px';
+        this.tempLine.style.top = startY + 'px';
+        this.tempLine.style.width = length + 'px';
+        this.tempLine.style.transform = `rotate(${angle}deg)`;
+    }
 
-        initialX = rect.left - workspaceRect.left;
-        initialY = rect.top - workspaceRect.top;
+    finishConnection(e) {
+        document.body.style.cursor = '';
+        this.removeTempLine();
+        const targetConnector = this.findTargetConnector(e.clientX, e.clientY);        // Ищем целевой коннектор
+        if (targetConnector && this.isValidConnection(this.currentConnector, targetConnector)) {
+            this.createConnection(this.currentConnector, targetConnector);
+        }
+        this.isConnecting = false;
+        this.currentConnector = null;
+        this.updateSchemeState();
+    }
 
-        block.style.zIndex = '100';
-        block.style.cursor = 'grabbing';
-        block.style.opacity = '0.8';
+    findTargetConnector(x, y) {
+        const elements = document.elementsFromPoint(x, y);
+        for (let element of elements) {
+            if (element.classList.contains('connector') && element !== this.currentConnector) {
+                console.log('🎯 Found target connector:', element);
+                return element;
+            }
+        }
+        console.log('🎯 No target connector found');
+        return null;
+    }
 
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('mouseup', stopDrag);
+    isValidConnection(source, target) {
+        const isSourceOutput = source.classList.contains('output');
+        const isTargetInput = target.classList.contains('input');
+        if (!isSourceOutput || !isTargetInput) {
+            return false;
+        }
+        if (source.parentElement === target.parentElement) {
+            return false;
+        }
+        return true;
+    }
 
+    createConnection(sourceConnector, targetConnector) {
+        const connection = this.schemeManager.createConnection(sourceConnector, targetConnector);     // Используем SchemeManager для создания соединения
+        if (connection) {
+            console.log('✅ Connection created successfully!');
+        }
+    }
+
+    cancelConnection() {
+        console.log('🚫 Connection cancelled');
+        document.body.style.cursor = '';
+        this.removeTempLine();
+        this.isConnecting = false;
+        this.currentConnector = null;
+    }
+
+    removeTempLine() {
+        if (this.tempLine) {
+            this.tempLine.remove();
+            this.tempLine = null;
+        }
+    }
+
+    setupSelectionHandlers() {
+        const workspace = document.getElementById('schemeWorkspace');
+        if (!workspace) return;
+        workspace.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON' ||
+                e.target.closest('button') ||
+                e.target.classList.contains('connector') ||
+                e.target.classList.contains('block')) {
+                return;
+            }
+            if (e.target === workspace || e.target.classList.contains('workspace')) {
+                this.startSelection(e);
+            }
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (this.isSelecting && this.selectionRect) {
+                const currentX = e.clientX;
+                const currentY = e.clientY;
+                const left = Math.min(this.selectionStart.x, currentX);
+                const top = Math.min(this.selectionStart.y, currentY);
+                const width = Math.abs(currentX - this.selectionStart.x);
+                const height = Math.abs(currentY - this.selectionStart.y);
+                this.selectionRect.style.left = left + 'px';
+                this.selectionRect.style.top = top + 'px';
+                this.selectionRect.style.width = width + 'px';
+                this.selectionRect.style.height = height + 'px';
+            }
+        });
+        document.addEventListener('mouseup', (e) => {
+            if (this.isSelecting && this.selectionRect) {
+                this.isSelecting = false;
+                const rect = this.selectionRect.getBoundingClientRect();
+                const blocks = workspace.querySelectorAll('.block');
+                const lines = workspace.querySelectorAll('.connection-line');
+                this.selectedElements.clear();
+                blocks.forEach(block => {
+                    const blockRect = block.getBoundingClientRect();
+                    if (this.isRectOverlap(rect, blockRect)) {
+                        this.selectElement(block);
+                    }
+                });
+                lines.forEach(line => {
+                    const lineRect = line.getBoundingClientRect();
+                    if (this.isRectOverlap(rect, lineRect)) {
+                        this.selectElement(line);
+                    }
+                });
+                this.selectionRect.remove();
+                this.selectionRect = null;
+            }
+        });
+        workspace.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                return;
+            }
+            if (e.target === workspace || e.target.classList.contains('workspace')) {
+                this.clearSelection();
+            }
+        });
+        document.addEventListener('keydown', (e) => {               // Управление клавишами
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            if (e.key === 'Delete' && this.selectedElements.size > 0) {
+                this.deleteSelectedElements();
+            }
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                this.moveSelectedElements(e.key);
+            }
+        });
+    }
+
+    startSelection(e) {
+        this.isSelecting = true;
+        this.selectionStart = { x: e.clientX, y: e.clientY };
+        this.selectionRect = document.createElement('div');
+        this.selectionRect.className = 'selection-rect';
+        const workspace = document.getElementById('schemeWorkspace');
+        workspace.appendChild(this.selectionRect);
         e.preventDefault();
     }
 
-    function drag(e) {
-        if (!isDragging) return;
-
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        let newX = initialX + dx;
-        let newY = initialY + dy;
-
-        const maxX = workspace.offsetWidth - block.offsetWidth - 10;
-        const maxY = workspace.offsetHeight - block.offsetHeight - 10;
-
-        newX = Math.max(10, Math.min(newX, maxX));
-        newY = Math.max(10, Math.min(newY, maxY));
-
-        block.style.left = newX + 'px';
-        block.style.top = newY + 'px';
-
-        // Обновляем соединения при перемещении
-        updateConnectionsForBlock(block);
+    isRectOverlap(rect1, rect2) {
+        return !(rect1.right < rect2.left ||
+                 rect1.left > rect2.right ||
+                 rect1.bottom < rect2.top ||
+                 rect1.top > rect2.bottom);
     }
 
-    function stopDrag() {
-        isDragging = false;
-        block.style.zIndex = '10';
-        block.style.cursor = 'move';
-        block.style.opacity = '1';
-
-        document.removeEventListener('mousemove', drag);
-        document.removeEventListener('mouseup', stopDrag);
+    selectElement(element) {
+        element.classList.add('selected');
+        this.selectedElements.add(element);
     }
-}
 
-function showActionModal() {
+    clearSelection() {
+        this.selectedElements.forEach(element => {
+            element.classList.remove('selected');
+        });
+        this.selectedElements.clear();
+    }
+
+    deleteSelectedElements() {
+        this.selectedElements.forEach(element => {
+            if (element.classList.contains('block')) {
+                this.schemeManager.removeBlock(element.dataset.id);
+            } else if (element.classList.contains('connection-line')) {
+                this.schemeManager.removeConnection(element);
+            }
+            element.remove();
+        });
+        this.selectedElements.clear();
+        this.updateSchemeState();
+    }
+
+
+    setupDragAndDrop() {
+        const workspace = document.getElementById('schemeWorkspace');
+        if (!workspace) return;
+        workspace.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            workspace.classList.add('drag-over');
+        });
+        workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            workspace.classList.remove('drag-over');
+            const blockType = e.dataTransfer.getData('text/plain');
+            if (!blockType || blockType === 'VARIABLE') return;
+            const rect = workspace.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.schemeManager.createBlock(blockType, x, y);
+        });
+        workspace.addEventListener('dragleave', (e) => {
+            if (!workspace.contains(e.relatedTarget)) {
+                workspace.classList.remove('drag-over');
+            }
+        });
+    }
+
+    handleDragStart(e) {
+        const blockType = e.target.dataset.type;
+        const isFromPalette = e.target.parentElement.classList.contains('palette');
+        if (!blockType) {
+            console.error('Block type not found for:', e.target);
+            return;
+        }
+        e.dataTransfer.setData('text/plain', blockType);
+        e.dataTransfer.setData('from-palette', isFromPalette);
+        e.dataTransfer.effectAllowed = 'move';
+        if (isFromPalette) {
+            e.target.style.opacity = '0.4';
+            setTimeout(() => {
+                if (e.target) e.target.style.opacity = '1';
+            }, 0);
+        } else {
+            e.target.style.opacity = '0.7';
+        }
+    }
+
+    initializePalette() {
+        const paletteBlocks = document.querySelectorAll('.palette .block');
+        paletteBlocks.forEach(block => {
+            block.addEventListener('dragstart', (e) => this.handleDragStart(e));
+        });
+    }
+
+    setupVariableInputs() {
+        const variablesInput = document.getElementById('variablesInput');
+        if (variablesInput) {
+            variablesInput.addEventListener('change', () => this.updateVariableBlocks());
+            variablesInput.addEventListener('blur', () => this.updateVariableBlocks());
+        }
+    }
+
+    updateVariableBlocks() {
+        const variablesInput = document.getElementById('variablesInput');
+        const workspace = document.getElementById('schemeWorkspace');
+        if (!variablesInput || !workspace) return;
+        const variablesText = variablesInput.value.trim();
+        if (!variablesText) return;
+        const variables = variablesText.split(',').map(v => v.trim()).filter(v => v);
+        this.schemeManager.createVariableBlocks(variables);
+    }
+
+    updateSchemeState() {
+        // Пересчитываем состояние схемы при любых изменениях
+        if (this.schemeManager) {
+            this.schemeManager.updateAllConnections();
+            console.log('Scheme state updated');
+        }
+    }
+    // API МЕТОДЫ
+    async calculateSchemeTruthTable() {
+        const variables = document.getElementById('variablesInput').value;
+        if (!variables) {
+            alert('Пожалуйста, введите переменные');
+            return;
+        }
+        try {
+            const schemeData = this.schemeManager.serialize();
+            const response = await fetch('/api/calculate_scheme', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    scheme: schemeData,
+                    variables: variables
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                this.displayTruthTable(result.table, 'Логическая схема');
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Ошибка расчета схемы: ' + error.message);
+        }
+    }
+    async analyzeExpression(type) {
     const expression = document.getElementById('expressionInput').value;
     const variables = document.getElementById('variablesInput').value;
-
+    console.log('Analyzing expression:', { expression, variables, type });
+    this.hideActionModal();
     if (!expression || !variables) {
         alert('Пожалуйста, введите выражение и переменные');
         return;
     }
-
-    const currentExpression = document.getElementById('currentExpression');
-    const currentVariables = document.getElementById('currentVariables');
-
-    if (currentExpression) {
-        currentExpression.textContent = expression;
-    }
-    if (currentVariables) {
-        currentVariables.textContent = variables;
-    }
-
-    const modal = document.getElementById('actionModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-    }
-}
-
-function hideActionModal() {
-    const modal = document.getElementById('actionModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
-}
-
-function buildLogicScheme() {
-    const expression = document.getElementById('expressionInput').value;
-    const variables = document.getElementById('variablesInput').value;
-    const workspace = document.getElementById('schemeWorkspace');
-
-    if (!expression) {
-        alert('Введите выражение для построения схемы');
-        return;
-    }
-
-    if (workspace) {
-        workspace.innerHTML = '';
-
-        const title = document.createElement('div');
-        title.className = 'scheme-title';
-        title.innerHTML = `
-            <h3>Логическая схема для выражения: ${expression}</h3>
-        `;
-        workspace.appendChild(title);
-
-        if (variables) {
-            updateVariableBlocks();
-        }
-    }
-}
-
-function clearSchemeWorkspace() {
-    const workspace = document.getElementById('schemeWorkspace');
-    if (workspace) {
-        workspace.innerHTML = '<div class="scheme-title"><h3>Перетащите блоки для построения схемы</h3></div>';
-        connections.clear();
-        selectedElements.clear();
-    }
-}
-
-// Функция для расчета таблицы истинности схемы
-async function calculateSchemeTruthTable() {
-    const variables = document.getElementById('variablesInput').value;
-
-    if (!variables) {
-        alert('Пожалуйста, введите переменные');
-        return;
-    }
-
     try {
-        // Собираем данные о схеме
-        const schemeData = collectSchemeData();
-
-        const response = await fetch('/api/calculate_scheme', {
+        const endpoint = type === 'truth_table' ? '/api/truth_table' : '/api/normal_forms';
+        console.log('Sending request to:', endpoint);
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
             body: JSON.stringify({
-                scheme: schemeData,
+                expression: expression,
                 variables: variables
             })
         });
-
         const result = await response.json();
-
+        console.log('Server response:', result);
         if (result.success) {
-            displayTruthTable(result.table, 'Логическая схема');
+            if (type === 'truth_table') {
+                this.displayTruthTable(result.table, result.expression);
+            } else {
+                this.displayNormalForms(result.original, result.cnf, result.dnf);
+            }
         } else {
             throw new Error(result.error || 'Unknown error');
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('Ошибка расчета схемы: ' + error.message);
     }
 }
-
-function collectSchemeData() {
-    const blocks = Array.from(document.querySelectorAll('.workspace .block'));
-    const connectionElements = Array.from(document.querySelectorAll('.connection-line'));
-
-    return {
-        blocks: blocks.map(block => ({
-            id: block.dataset.id,
-            type: block.dataset.type,
-            variable: block.dataset.variable,
-            position: {
-                x: parseInt(block.style.left) || 0,
-                y: parseInt(block.style.top) || 0
-            }
-        })),
-        connections: connectionElements.map(line => ({
-            id: line.dataset.connection,
-            points: getLinePoints(line)
-        }))
-    };
-}
-
-function getLinePoints(line) {
-    const style = line.style;
-    const angle = parseFloat(style.transform.replace('rotate(', '').replace('deg)', '')) || 0;
-    const length = parseInt(style.width) || 0;
-
-    const startX = parseInt(style.left) || 0;
-    const startY = parseInt(style.top) || 0;
-
-    // Вычисляем конечную точку на основе угла и длины
-    const rad = angle * Math.PI / 180;
-    const endX = startX + length * Math.cos(rad);
-    const endY = startY + length * Math.sin(rad);
-
-    return {
-        startX: startX,
-        startY: startY,
-        endX: endX,
-        endY: endY
-    };
-}
-
-async function analyzeExpression(type) {
-    const expression = document.getElementById('expressionInput').value;
-    const variables = document.getElementById('variablesInput').value;
-
-    hideActionModal();
-
-    if (!expression || !variables) {
-        alert('Пожалуйста, введите выражение и переменные');
-        return;
-    }
-
-    try {
-        if (type === 'truth_table') {
-            const response = await fetch('/api/truth_table', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    expression: expression,
-                    variables: variables
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                displayTruthTable(result.table, result.expression);
-            } else {
-                throw new Error(result.error || 'Unknown error');
-            }
-        } else if (type === 'transform') {
-            const response = await fetch('/api/normal_forms', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    expression: expression,
-                    variables: variables
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                displayNormalForms(result.original, result.cnf, result.dnf);
-            } else {
-                throw new Error(result.error || 'Unknown error');
-            }
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('Ошибка: ' + error.message);
-    }
-}
-
-function displayTruthTable(table, expression) {
+    // МЕТОДЫ ОТОБРАЖЕНИЯ
+displayTruthTable(table, expression) {
     const truthTableSection = document.getElementById('truthTableSection');
     const truthTableContent = document.getElementById('truthTableContent');
     const transformSection = document.getElementById('transformSection');
@@ -1069,33 +455,469 @@ function displayTruthTable(table, expression) {
     `;
 
     truthTableContent.innerHTML = html;
-
     if (truthTableSection) truthTableSection.classList.remove('hidden');
     if (transformSection) transformSection.classList.add('hidden');
 }
 
-function displayNormalForms(original, cnf, dnf) {
-    const transformSection = document.getElementById('transformSection');
-    const transformContent = document.getElementById('transformContent');
-    const truthTableSection = document.getElementById('truthTableSection');
+    displayNormalForms(original, cnf, dnf) {
+        const transformSection = document.getElementById('transformSection');
+        const transformContent = document.getElementById('transformContent');
+        const truthTableSection = document.getElementById('truthTableSection');
+        if (!transformContent) return;
+        const html = `
+            <h3>Преобразование выражения</h3>
+            <div class="expression-preview">
+                <strong>Исходное:</strong> ${original}
+            </div>
+            <div class="expression-preview">
+                <strong>КНФ (Конъюнктивная нормальная форма):</strong> ${cnf}
+            </div>
+            <div class="expression-preview">
+                <strong>ДНФ (Дизъюнктивная нормальная форма):</strong> ${dnf}
+            </div>
+        `;
+        transformContent.innerHTML = html;
+        if (transformSection) transformSection.classList.remove('hidden');
+        if (truthTableSection) truthTableSection.classList.add('hidden');
+    }
 
-    if (!transformContent) return;
+    showActionModal() {
+        const expression = document.getElementById('expressionInput').value;
+        const variables = document.getElementById('variablesInput').value;
+        if (!expression || !variables) {
+            alert('Пожалуйста, введите выражение и переменные');
+            return;
+        }
+        const currentExpression = document.getElementById('currentExpression');
+        const currentVariables = document.getElementById('currentVariables');
+        if (currentExpression) currentExpression.textContent = expression;
+        if (currentVariables) currentVariables.textContent = variables;
+        const modal = document.getElementById('actionModal');
+        if (modal) modal.classList.remove('hidden');
+    }
 
-    const html = `
-        <h3>Преобразование выражения</h3>
-        <div class="expression-preview">
-            <strong>Исходное:</strong> ${original}
-        </div>
-        <div class="expression-preview">
-            <strong>КНФ (Конъюнктивная нормальная форма):</strong> ${cnf}
-        </div>
-        <div class="expression-preview">
-            <strong>ДНФ (Дизъюнктивная нормальная форма):</strong> ${dnf}
-        </div>
-    `;
+    hideActionModal() {
+        const modal = document.getElementById('actionModal');
+        if (modal) modal.classList.add('hidden');
+    }
 
-    transformContent.innerHTML = html;
-
-    if (transformSection) transformSection.classList.remove('hidden');
-    if (truthTableSection) truthTableSection.classList.add('hidden');
+    buildLogicScheme() {
+        const expression = document.getElementById('expressionInput').value;
+        const variables = document.getElementById('variablesInput').value;
+        if (!expression) {
+            alert('Введите выражение для построения схемы');
+            return;
+        }
+        this.schemeManager.buildScheme(expression, variables);
+    }
+    clearSchemeWorkspace() {
+        this.schemeManager.clear();
+    }
 }
+
+// Класс управления схемами
+class SchemeManager {
+    constructor(workspaceId) {
+        this.workspace = document.getElementById(workspaceId);
+        this.blocks = new Map();
+        this.connections = new Map();
+        console.log('📋 SchemeManager initialized');
+    }
+
+    createBlock(type, x, y, variableName = null) {
+        const blockId = `${type.toLowerCase()}_${Date.now()}_${Math.random()}`;
+        const block = new Block(blockId, type, x, y, variableName);
+        this.blocks.set(blockId, block);
+        this.workspace.appendChild(block.element);
+        return block;
+    }
+
+    createConnection(sourceConnector, targetConnector) {
+    const connectionId = this.getConnectionId(sourceConnector, targetConnector);
+    const connection = new Connection(sourceConnector, targetConnector);
+    this.connections.set(connectionId, connection);
+    return connection;
+}
+
+    updateConnectionsForBlock(blockElement) {      // Обновление соединений конкретного блока
+        const blockId = blockElement.dataset.id;
+        console.log(`🔄 Updating connections for block: ${blockId}`);
+        let updatedCount = 0;
+        this.connections.forEach((connection, connectionId) => {
+            if (connectionId.includes(blockId)) {
+                connection.updatePosition();
+                updatedCount++;
+            }
+        });
+        console.log(`✅ Updated ${updatedCount} connections for block ${blockId}`);
+    }
+
+    updateAllConnections() {                        // Обновление всех соединений
+        console.log('🔄 Updating all connections');
+        this.connections.forEach((connection) => {
+            connection.updatePosition();
+        });
+    }
+
+    getConnectionId(connector1, connector2) {
+        const id1 = connector1.dataset.parentId + '_' + connector1.dataset.type;
+        const id2 = connector2.dataset.parentId + '_' + connector2.dataset.type;
+        return [id1, id2].sort().join('|');
+    }
+
+    removeBlock(blockId) {
+        const block = this.blocks.get(blockId);
+        if (block) {
+            this.removeConnectionsForBlock(blockId);
+            block.element.remove();
+            this.blocks.delete(blockId);
+        }
+    }
+
+    removeConnectionsForBlock(blockId) {
+        const connectionsToRemove = [];
+        console.log(`🗑️ Removing connections for block: ${blockId}`);
+        this.connections.forEach((connection, connectionId) => {
+            if (connectionId.includes(blockId)) {
+                connectionsToRemove.push(connectionId);
+                connection.destroy();
+            }
+        });
+        connectionsToRemove.forEach(id => this.connections.delete(id));
+        console.log(`✅ Removed ${connectionsToRemove.length} connections`);
+    }
+
+    removeConnection(line) {
+        const connectionId = line.dataset.connection;
+        const connection = this.connections.get(connectionId);
+        if (connection) {
+            connection.destroy();
+            this.connections.delete(connectionId);
+        }
+    }
+
+    serialize() {
+        const blocks = Array.from(document.querySelectorAll('#schemeWorkspace .block'));
+        const connectionElements = Array.from(document.querySelectorAll('#schemeWorkspace .connection-line'));
+
+        return {
+            blocks: blocks.map(block => ({
+                id: block.dataset.id,
+                type: block.dataset.type,
+                variable: block.dataset.variable,
+                position: {
+                    x: parseInt(block.style.left) || 0,
+                    y: parseInt(block.style.top) || 0
+                }
+            })),
+            connections: connectionElements.map(line => ({
+                id: line.dataset.connection,
+                source: line.dataset.source,  // Добавьте если нужно
+                target: line.dataset.target   // Добавьте если нужно
+            }))
+        };
+    }
+
+    buildScheme(expression, variables) {
+        this.clear();
+        const title = document.createElement('div');
+        title.className = 'scheme-title';
+        title.innerHTML = `<h3>Логическая схема для выражения: ${expression}</h3>`;
+        this.workspace.appendChild(title);
+        if (variables) {
+            this.createVariableBlocks(variables);
+        }
+    }
+
+    createVariableBlocks(variables) {
+        const variableList = variables.split(',').map(v => v.trim()).filter(v => v);
+        const oldVarBlocks = this.workspace.querySelectorAll('.variable-block'); // Удаляем старые блоки переменных
+        oldVarBlocks.forEach(block => {
+            const blockId = block.dataset.id;
+            this.removeBlock(blockId);
+        });
+        variableList.forEach((variable, index) => {                             // Создаем новые блоки переменных
+            this.createBlock('VARIABLE', index * 100 + 20, 20, variable);
+        });
+    }
+    clear() {
+        this.workspace.innerHTML = '<div class="scheme-title"><h3>Перетащите блоки для построения схемы</h3></div>';
+        this.blocks.clear();
+        this.connections.clear();
+    }
+}
+
+// Класс блока
+class Block {
+    constructor(id, type, x, y, variableName = null) {
+        this.id = id;
+        this.type = type;
+        this.position = { x, y };
+        this.variableName = variableName;
+        this.connectors = [];
+        this.element = null;
+        this.createDOMElement();
+        this.createConnectors();
+        this.setupEventListeners();
+        this.makeDraggable();
+    }
+
+    createDOMElement() {
+        this.element = document.createElement('div');
+        this.element.className = `block ${this.type.toLowerCase()}-block`;
+        this.element.textContent = this.variableName || this.type;
+        this.element.dataset.id = this.id;
+        this.element.dataset.type = this.type;
+        this.element.style.left = `${this.position.x}px`;
+        this.element.style.top = `${this.position.y}px`;
+        if (this.variableName) {
+            this.element.dataset.variable = this.variableName;
+        }
+    }
+
+    createConnectors() {
+        const config = {
+            'AND': { inputs: ['top', 'bottom'], outputs: 1 },
+            'OR': { inputs: ['top', 'bottom'], outputs: 1 },
+            'NOT': { inputs: ['center'], outputs: 1 },
+            'XOR': { inputs: ['top', 'bottom'], outputs: 1 },
+            'VARIABLE': { inputs: [], outputs: 1 },
+            'INPUT': { inputs: [], outputs: 1 },
+            'OUTPUT': { inputs: ['center'], outputs: 0 }
+        };
+        const blockConfig = config[this.type] || { inputs: [], outputs: 0 };
+        blockConfig.inputs.forEach(position => {         // Создаем входные коннекторы
+            this.createConnector('input', position);
+        });
+        for (let i = 0; i < blockConfig.outputs; i++) {  // Создаем выходные коннекторы
+            this.createConnector('output', 'center');
+        }
+    }
+
+    createConnector(connectorType, position) {
+        const connector = new Connector(this.id, connectorType, position);
+        this.connectors.push(connector);
+        this.element.appendChild(connector.element);
+    }
+
+    setupEventListeners() {
+        this.element.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!e.ctrlKey && !e.metaKey) {
+                window.boolTrainerApp.clearSelection();
+            }
+            window.boolTrainerApp.selectElement(this.element);
+        });
+        this.element.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', this.type);
+            e.dataTransfer.setData('from-palette', 'false');
+            e.dataTransfer.effectAllowed = 'move';
+            this.element.style.opacity = '0.7';
+        });
+    }
+
+    makeDraggable() {
+        let isDragging = false;
+        let startX, startY, initialX, initialY;
+        const workspace = document.getElementById('schemeWorkspace');
+        this.element.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('connector') ||
+                e.target.tagName === 'BUTTON' ||
+                e.target.closest('button')) {
+                return;
+            }
+            if (e.button !== 0) return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = this.element.getBoundingClientRect();
+            const workspaceRect = workspace.getBoundingClientRect();
+            initialX = rect.left - workspaceRect.left;
+            initialY = rect.top - workspaceRect.top;
+            this.element.style.zIndex = '100';
+            this.element.style.cursor = 'grabbing';
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            e.preventDefault();
+        });
+        const drag = (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            let newX = initialX + dx;
+            let newY = initialY + dy;
+            const maxX = workspace.offsetWidth - this.element.offsetWidth - 10;
+            const maxY = workspace.offsetHeight - this.element.offsetHeight - 10;
+            newX = Math.max(10, Math.min(newX, maxX));
+            newY = Math.max(10, Math.min(newY, maxY));
+            this.element.style.left = newX + 'px';
+            this.element.style.top = newY + 'px';
+            if (window.boolTrainerApp && window.boolTrainerApp.schemeManager) {             // Обновляем соединения при перемещении
+                window.boolTrainerApp.schemeManager.updateConnectionsForBlock(this.element);
+            }
+        };
+        const stopDrag = () => {
+            isDragging = false;
+            this.element.style.zIndex = '10';
+            this.element.style.cursor = 'move';
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+            setTimeout(() => {             // Финальное обновление после завершения перемещения
+                if (window.boolTrainerApp && window.boolTrainerApp.schemeManager) {
+                    window.boolTrainerApp.schemeManager.updateAllConnections();
+                    window.boolTrainerApp.updateSchemeState();
+                }
+            }, 50);
+        };
+    }
+
+    moveTo(x, y) {
+        this.position = { x, y };
+        this.element.style.left = `${x}px`;
+        this.element.style.top = `${y}px`;
+        if (this._updateTimeout) {
+            clearTimeout(this._updateTimeout);
+        }
+        this._updateTimeout = setTimeout(() => {
+            if (window.boolTrainerApp?.schemeManager) {
+                window.boolTrainerApp.schemeManager.updateConnectionsForBlock(this.element);
+            }
+            this._updateTimeout = null;
+        }, 100);
+    }
+}
+
+// Класс коннектора
+class Connector {
+    constructor(blockId, type, position) {
+        this.blockId = blockId;
+        this.type = type;
+        this.position = position;
+        this.connectedTo = null;
+        this.element = null;
+        this.createDOMElement();
+        this.setupEventListeners();
+    }
+
+    createDOMElement() {
+        this.element = document.createElement('div');
+        this.element.className = `connector ${this.type} ${this.position}`;
+        this.element.dataset.type = this.type;
+        this.element.dataset.parentId = this.blockId;
+        this.element.title = this.type === 'input' ? 'Вход' : 'Выход';
+    }
+
+    setupEventListeners() {
+        this.element.addEventListener('mousedown', (e) => {
+            window.boolTrainerApp.startConnection(e);
+        });
+        this.element.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+
+    connectTo(connector) {
+        this.connectedTo = connector;
+        this.element.classList.add('connected');
+    }
+
+    disconnect() {
+        this.connectedTo = null;
+        this.element.classList.remove('connected');
+    }
+}
+
+// Класс соединения
+class Connection {
+    constructor(sourceConnector, targetConnector) {
+        console.log('🔗 NEW Connection created');
+        this.source = sourceConnector; // DOM элемент коннектора
+        this.target = targetConnector; // DOM элемент коннектора
+        this.element = document.createElement('div');
+        this.element.className = 'connection-line';
+        this.element.dataset.connection = this.generateId(sourceConnector, targetConnector);
+        const workspace = document.getElementById('schemeWorkspace');
+        if (workspace) {
+            workspace.appendChild(this.element);
+            console.log('✅ Connection element added to DOM');
+        }
+        this.updatePosition(); // Первоначальная позиция
+    }
+
+    generateId(source, target) {
+        const id1 = source.dataset.parentId + '_' + source.dataset.type;
+        const id2 = target.dataset.parentId + '_' + target.dataset.type;
+        return [id1, id2].sort().join('|');
+    }
+
+    updatePosition() {
+        if (!this.source || !this.target || !this.element) return;
+        try {
+            const workspace = document.getElementById('schemeWorkspace');
+            const workspaceRect = workspace.getBoundingClientRect();
+            const sourceRect = this.source.getBoundingClientRect();
+            const targetRect = this.target.getBoundingClientRect();
+            const startX = sourceRect.left + sourceRect.width / 2 - workspaceRect.left;
+            const startY = sourceRect.top + sourceRect.height / 2 - workspaceRect.top;
+            const endX = targetRect.left + targetRect.width / 2 - workspaceRect.left;
+            const endY = targetRect.top + targetRect.height / 2 - workspaceRect.top;
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            this.element.style.left = startX + 'px';
+            this.element.style.top = startY + 'px';
+            this.element.style.width = length + 'px';
+            this.element.style.transform = `rotate(${angle}deg)`;
+        } catch (error) {
+            console.error('❌ Connection update error:', error);
+        }
+    }
+        destroy() {
+            if (this.element) {
+                this.element.remove();
+            }
+        }
+    }
+
+// Класс управления интерфейсом
+class UIController {
+    constructor() {
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        const quickStartBtn = document.getElementById('quickStartBtn');
+        const truthTableBtn = document.getElementById('truthTableBtn');
+        const transformBtn = document.getElementById('transformBtn');
+        const schemeBtn = document.getElementById('schemeBtn');
+        const closeModal = document.getElementById('closeModal');
+        const buildSchemeBtn = document.getElementById('buildSchemeBtn');
+        const clearSchemeBtn = document.getElementById('clearSchemeBtn');
+        const calculateSchemeBtn = document.getElementById('calculateSchemeBtn');
+        if (quickStartBtn) quickStartBtn.addEventListener('click', () => window.boolTrainerApp.showActionModal());
+        if (truthTableBtn) truthTableBtn.addEventListener('click', () => window.boolTrainerApp.analyzeExpression('truth_table'));
+        if (transformBtn) transformBtn.addEventListener('click', () => window.boolTrainerApp.analyzeExpression('transform'));
+        if (schemeBtn) {
+            schemeBtn.addEventListener('click', () => {
+                window.boolTrainerApp.hideActionModal();
+                window.boolTrainerApp.buildLogicScheme();
+            });
+        }
+        if (closeModal) closeModal.addEventListener('click', () => window.boolTrainerApp.hideActionModal());
+        if (buildSchemeBtn) buildSchemeBtn.addEventListener('click', () => window.boolTrainerApp.buildLogicScheme());
+        if (clearSchemeBtn) clearSchemeBtn.addEventListener('click', () => window.boolTrainerApp.clearSchemeWorkspace());
+        if (calculateSchemeBtn) calculateSchemeBtn.addEventListener('click', () => window.boolTrainerApp.calculateSchemeTruthTable());
+        const modal = document.getElementById('actionModal');
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) window.boolTrainerApp.hideActionModal();
+            });
+        }
+    }
+}
+// Инициализация приложения
+document.addEventListener('DOMContentLoaded', () => {
+    window.boolTrainerApp = new BoolTrainerApp();
+    window.boolTrainerApp.init();
+});
